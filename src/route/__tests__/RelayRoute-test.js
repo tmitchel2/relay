@@ -38,17 +38,17 @@ describe('RelayRoute', () => {
         }
       };
       MockRoute.queries = {
-        required: (Component, params) => Relay.QL`
+        required: Component => Relay.QL`
           query {
             node(id:$required) {
-              ${Component.getQuery('required')}
+              ${Component.getFragment('required')}
             }
           }
         `,
-        optional: (Component, params) => Relay.QL`
+        optional: Component => Relay.QL`
           query {
             node(id:$optional) {
-              ${Component.getQuery('optional')}
+              ${Component.getFragment('optional')}
             }
           }
         `
@@ -97,7 +97,7 @@ describe('RelayRoute', () => {
       new MockRoute({});
     }).toFailInvariant(
       'RelayRoute: Missing required parameter `required` in `MockRoute`. ' +
-      'Check the supplied params or URI (null).'
+      'Check the supplied params or URI.'
     );
   });
 

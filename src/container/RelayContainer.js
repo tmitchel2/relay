@@ -33,13 +33,13 @@ var RelayPendingQueryTracker = require('RelayPendingQueryTracker');
 var RelayPropTypes = require('RelayPropTypes');
 var RelayProfiler = require('RelayProfiler');
 var RelayQuery = require('RelayQuery');
-import type {Params} from 'RelayRoute';
 var RelayStore = require('RelayStore');
 var RelayStoreData = require('RelayStoreData');
 import type {
   Abortable,
   ComponentReadyStateChangeCallback,
   RelayContainer,
+  RelayProp,
   Variables
 } from 'RelayTypes';
 import type URI from 'URI';
@@ -64,9 +64,9 @@ export type RelayContainerSpec = {
   };
 };
 export type RelayLazyContainer = Function;
-export type RelayQueryConfig = {
+export type RelayQueryConfigSpec = {
   name: string;
-  params: Params;
+  params: Variables;
   queries: RootQueries;
   uri?: ?URI;
 };
@@ -376,9 +376,9 @@ function createContainerComponent(
         );
         return null;
       }
-      var fragment = RelayQuery.Node.create(
-        fragmentReference.defer(),
-        RelayMetaRoute.get(this.context.route.name),
+      var fragment = getDeferredFragment(
+        fragmentReference,
+        this.context,
         this.state.variables
       );
       invariant(
@@ -418,9 +418,9 @@ function createContainerComponent(
         componentName,
         componentName
       );
-      var fragment = RelayQuery.Node.create(
-        fragmentReference.defer(),
-        RelayMetaRoute.get(this.context.route.name),
+      var fragment = getDeferredFragment(
+        fragmentReference,
+        this.context,
         this.state.variables
       );
       invariant(
@@ -561,7 +561,7 @@ function createContainerComponent(
 
     _updateFragmentPointers(
       props: Object,
-      route: RelayQueryConfig,
+      route: RelayQueryConfigSpec,
       variables: Variables
     ): void {
       var fragmentPointers = this._fragmentPointers;
@@ -769,7 +769,7 @@ function createContainerComponent(
     }
 
     render(): ReactElement {
-      var relayProps = {
+      var relayProps: RelayProp = {
         forceFetch: this.forceFetch,
         getFragmentError: this.getFragmentError,
         getPendingTransactions: this.getPendingTransactions,
@@ -783,7 +783,7 @@ function createContainerComponent(
         <Component
           {...this.props}
           {...this.state.queryData}
-          {...prepareRelayContainerProps(relayProps)}
+          {...prepareRelayContainerProps(relayProps, this)}
           ref="component"
         />
       );
@@ -792,7 +792,7 @@ function createContainerComponent(
 
   function getFragment(
     fragmentName: string,
-    route: RelayQueryConfig,
+    route: RelayQueryConfigSpec,
     variables: Variables
   ): RelayQuery.Fragment {
     var fragmentBuilder = fragments[fragmentName];
@@ -813,7 +813,7 @@ function createContainerComponent(
     if (prepareVariables) {
       variables = prepareVariables(variables, metaRoute);
     }
-    return RelayQuery.Node.createFragment(
+    return RelayQuery.Fragment.create(
       fragment,
       metaRoute,
       variables
@@ -927,6 +927,26 @@ function buildContainerFragment(
     fragmentName
   );
   return fragment;
+}
+
+function getDeferredFragment(
+  fragmentReference: RelayFragmentReference,
+  context: Object,
+  variables: Variables
+): RelayQuery.Fragment {
+  var route = RelayMetaRoute.get(context.route.name);
+  var concreteFragment = fragmentReference.getFragment(variables);
+  var concreteVariables = fragmentReference.getVariables(route, variables);
+  return RelayQuery.Fragment.create(
+    concreteFragment,
+    route,
+    concreteVariables,
+    {
+      isDeferred: true,
+      isContainerFragment: fragmentReference.isContainerFragment(),
+      isTypeConditional: fragmentReference.isTypeConditional(),
+    }
+  );
 }
 
 /**

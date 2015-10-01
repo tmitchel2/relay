@@ -23,7 +23,7 @@ var Relay = require('Relay');
 describe('writeRelayQueryPayload()', () => {
   var RelayRecordStore;
 
-  var {getNode, writePayload} = RelayTestUtils;
+  var {getNode, getVerbatimNode, writePayload} = RelayTestUtils;
 
   beforeEach(() => {
     jest.resetModuleRegistry();
@@ -53,7 +53,7 @@ describe('writeRelayQueryPayload()', () => {
         }
       `);
       var payload = {
-        '123': {
+        node: {
           id: '123',
           allPhones: [],
         }
@@ -98,7 +98,7 @@ describe('writeRelayQueryPayload()', () => {
         }
       `);
       var payload = {
-        '123': {
+        node: {
           id: '123',
           allPhones: [phone]
         }
@@ -177,7 +177,7 @@ describe('writeRelayQueryPayload()', () => {
         }
       `);
       var payload = {
-        '123': {
+        node: {
           id: '123',
           allPhones: [newPhone]
         }
@@ -247,7 +247,7 @@ describe('writeRelayQueryPayload()', () => {
         }
       `);
       var payload = {
-        '123': {
+        node: {
           id: '123',
           allPhones: [phone]
         }
@@ -293,7 +293,7 @@ describe('writeRelayQueryPayload()', () => {
         }
       `);
       var payload = {
-        '123': {
+        node: {
           id: '123',
           allPhones: [],
         }
@@ -305,6 +305,56 @@ describe('writeRelayQueryPayload()', () => {
       });
       var phoneIDs = store.getLinkedRecordIDs('123', 'allPhones');
       expect(phoneIDs).toEqual([]);
+    });
+
+    it('records the concrete type if `__typename` is present', () => {
+      var records = {};
+      var store = new RelayRecordStore({records});
+      var query = getNode(Relay.QL`
+        query {
+          node(id: "1") {
+            actors {
+              id,
+              __typename
+            }
+          }
+        }
+      `);
+      var payload = {
+        node: {
+          id: '1',
+          actors: [{
+            id: '123',
+            __typename: 'User',
+          }],
+        },
+      };
+      writePayload(store, query, payload);
+      expect(store.getType('123')).toBe('User');
+    });
+
+    it('records the parent field type if `__typename` is not present', () => {
+      var records = {};
+      var store = new RelayRecordStore({records});
+      var query = getVerbatimNode(Relay.QL`
+        query {
+          node(id: "1") {
+            actors {
+              id
+            }
+          }
+        }
+      `);
+      var payload = {
+        node: {
+          id: '1',
+          actors: [{
+            id: '123',
+          }],
+        },
+      };
+      writePayload(store, query, payload);
+      expect(store.getType('123')).toBe('Actor');
     });
   });
 });

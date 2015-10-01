@@ -14,7 +14,6 @@ var babelPluginDEV = require('fbjs-scripts/babel/dev-expression');
 var babelPluginModules = require('fbjs-scripts/babel/rewrite-modules');
 var del = require('del');
 var derequire = require('gulp-derequire');
-var envify = require('envify/custom');
 var flatten = require('gulp-flatten');
 var gulp = require('gulp');
 var gulpUtil = require('gulp-util');
@@ -64,11 +63,6 @@ var buildDist = function(opts) {
       'react': 'React',
       'react-dom': 'ReactDOM'
     },
-    module: {
-      loaders: [
-        {test: /\.js$/, loader: 'babel'}
-      ],
-    },
     output: {
       filename: opts.output,
       libraryTarget: 'umd',
@@ -100,7 +94,7 @@ var buildDist = function(opts) {
       throw new gulpUtil.PluginError('webpack', err);
     }
     if (stats.compilation.errors.length) {
-      gulpUtil.log('webpack', '\n' + stats.toString({colors: true}));
+      throw new gulpUtil.PluginError('webpack', stats.toString());
     }
   });
 };
@@ -128,7 +122,7 @@ gulp.task('modules', function() {
     .pipe(gulp.dest(paths.lib));
 });
 
-gulp.task('dist', ['modules'], function () {
+gulp.task('dist', ['modules'], function() {
   var distOpts = {
     debug: true,
     output: 'relay.js'
@@ -142,7 +136,7 @@ gulp.task('dist', ['modules'], function () {
     .pipe(gulp.dest(paths.dist));
 });
 
-gulp.task('dist:min', ['modules'], function () {
+gulp.task('dist:min', ['modules'], function() {
   var distOpts = {
     debug: false,
     output: 'relay.min.js'
@@ -171,5 +165,5 @@ gulp.task('watch', function() {
 });
 
 gulp.task('default', function(cb) {
-  runSequence('clean', 'website:check-version', 'modules', ['dist', 'dist:min'], cb);
+  runSequence('clean', 'website:check-version', ['dist', 'dist:min'], cb);
 });

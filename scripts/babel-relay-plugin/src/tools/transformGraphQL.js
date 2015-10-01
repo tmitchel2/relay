@@ -1,3 +1,12 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
 'use strict';
 
 var babel = require('babel-core');
@@ -5,7 +14,7 @@ var fs = require('fs');
 var path = require('path');
 var util = require('util');
 
-var getBabelRelayPlugin = require('./getBabelRelayPlugin');
+var getBabelRelayPlugin = require('../getBabelRelayPlugin');
 
 var _schemas = {};
 function getSchema(schemaPath) {
@@ -27,7 +36,10 @@ function getSchema(schemaPath) {
 }
 
 function transformGraphQL(schemaPath, source, filename) {
-  var plugin = getBabelRelayPlugin(getSchema(schemaPath));
+  var plugin = getBabelRelayPlugin(getSchema(schemaPath), {
+    abortOnError: false,
+    suppressWarnings: true,
+  });
   return babel.transform(source, {
     compact: false,
     filename: filename,

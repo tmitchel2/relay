@@ -13,7 +13,7 @@
 
 'use strict';
 
-import type {Call, PrintedQuery} from 'RelayInternalTypes';
+import type {PrintedQuery} from 'RelayInternalTypes';
 var RelayProfiler = require('RelayProfiler');
 var RelayQuery = require('RelayQuery');
 
@@ -103,16 +103,10 @@ function printRoot(
       rootFieldString += '(' + rootArgString + ')';
     }
   }
+  // Note: children must be traversed before printing variable definitions
   var children = printChildren(node, printerState);
-
-  var argStrings = null;
-  forEachObject(printerState.variableMap, (variable, variableID) => {
-    argStrings = argStrings || [];
-    argStrings.push('$' + variableID + ':' + variable.type);
-  });
-  if (argStrings) {
-    queryString += '(' + argStrings.join(',') + ')';
-  }
+  queryString += printVariableDefinitions(printerState);
+  rootFieldString += printDirectives(node);
 
   return 'query ' + queryString + '{' + rootFieldString + children + '}';
 }
@@ -121,20 +115,46 @@ function printMutation(
   node: RelayQuery.Mutation,
   printerState: PrinterState
 ): string {
-  var inputName = node.getCallVariableName();
-  var call = '(' + inputName + ':$' + inputName + ')';
-  return 'mutation ' + node.getName() + '($' + inputName + ':' +
-    node.getInputType() + ')' + '{' +
-    node.getCall().name + call +
-    printChildren(node, printerState) + '}';
+  var call = node.getCall();
+  var inputString = printArgument(
+    node.getCallVariableName(),
+    call.value,
+    node.getInputType(),
+    printerState
+  );
+  invariant(
+    inputString,
+    'printRelayOSSQuery(): Expected mutation `%s` to have a value for `%s`.',
+    node.getName(),
+    node.getCallVariableName()
+  );
+  // Note: children must be traversed before printing variable definitions
+  var children = printChildren(node, printerState);
+  var mutationString = node.getName() + printVariableDefinitions(printerState);
+  var rootFieldString = call.name + '(' + inputString + ')';
+
+  return 'mutation ' + mutationString + '{' + rootFieldString + children + '}';
+}
+
+function printVariableDefinitions(printerState: PrinterState): string {
+  var argStrings = null;
+  forEachObject(printerState.variableMap, (variable, variableID) => {
+    argStrings = argStrings || [];
+    argStrings.push('$' + variableID + ':' + variable.type);
+  });
+  if (argStrings) {
+    return '(' + argStrings.join(',') + ')';
+  }
+  return '';
 }
 
 function printFragment(
   node: RelayQuery.Fragment,
   printerState: PrinterState
 ): string {
+  var directives = printDirectives(node);
   return 'fragment ' + node.getDebugName() + ' on ' +
-    node.getType() + printChildren(node, printerState);
+    node.getType() + directives + printChildren(node, printerState);
 }
 
 function printInlineFragment(
@@ -144,8 +164,9 @@ function printInlineFragment(
   var fragmentID = node.getFragmentID();
   var {fragmentMap} = printerState;
   if (!(fragmentID in fragmentMap)) {
-    fragmentMap[fragmentID] = 'fragment ' + fragmentID + ' on ' +
-      node.getType() + printChildren(node, printerState);
+    var directives = printDirectives(node);
+    fragmentMap[fragmentID] = 'fragment ' + node.getFragmentID() + ' on ' +
+      node.getType() + directives + printChildren(node, printerState);
   }
   return '...' + fragmentID;
 }
@@ -180,8 +201,9 @@ function printField(
       fieldString += '(' + argStrings.join(',') + ')';
     }
   }
+  var directives = printDirectives(node);
   return (serializationKey !== schemaName ? serializationKey + ':' : '') +
-    fieldString + printChildren(node, printerState);
+    fieldString + directives + printChildren(node, printerState);
 }
 
 function printChildren(
@@ -205,6 +227,36 @@ function printChildren(
     return '';
   }
   return '{' + children.join(',') + '}';
+}
+
+function printDirectives(node) {
+  var directiveStrings;
+  node.getDirectives().forEach(directive => {
+    var dirString = '@' + directive.name;
+    if (directive.arguments.length) {
+      dirString +=
+        '(' + directive.arguments.map(printDirective).join(',') + ')';
+    }
+    directiveStrings = directiveStrings || [];
+    directiveStrings.push(dirString);
+  });
+  if (!directiveStrings) {
+    return '';
+  }
+  return ' ' + directiveStrings.join(' ');
+}
+
+function printDirective({name,value}) {
+  invariant(
+    typeof value === 'boolean' ||
+    typeof value === 'number' ||
+    typeof value === 'string',
+    'printRelayOSSQuery(): Relay only supports directives with scalar values ' +
+    '(boolean, number, or string), got `%s: %s`.',
+    name,
+    value
+  );
+  return name + ':' + JSON.stringify(value);
 }
 
 function printArgument(

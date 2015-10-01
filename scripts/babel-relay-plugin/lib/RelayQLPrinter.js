@@ -1,8 +1,17 @@
-/*jslint node:true*/
-"use strict";
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+'use strict';
 
 var kinds = require('graphql/language/kinds');
 var printer = require('graphql/language/printer');
+var t = require('babel-core/lib/types');
 var types = require('graphql/type');
 var typeIntrospection = require('graphql/type/introspection');
 
@@ -12,54 +21,50 @@ var SchemaMetaFieldDef = typeIntrospection.SchemaMetaFieldDef;
 var TypeMetaFieldDef = typeIntrospection.TypeMetaFieldDef;
 var TypeNameMetaFieldDef = typeIntrospection.TypeNameMetaFieldDef;
 
+var NULL = t.literal(null);
+
 /**
  * This is part of the Babel transform to convert embedded GraphQL RFC to
  * JavaScript. It converts from GraphQL AST to a string of JavaScript code.
  */
-function GraphQLPrinter(schema, rqlFunctionName) {
+function RelayQLPrinter(schema, rqlFunctionName) {
   this.rqlFunctionName = rqlFunctionName;
   this.schema = schema;
 }
 
-GraphQLPrinter.prototype.getCode = function(ast, substitutions) {
+RelayQLPrinter.prototype.getCode = function (ast, substitutions) {
   var options = {
     rqlFunctionName: this.rqlFunctionName,
     schema: this.schema,
     substitutions: substitutions
   };
 
+  var printedDocument;
   switch (ast.kind) {
     case kinds.OPERATION_DEFINITION:
       switch (ast.operation) {
         case 'query':
-          return printQuery(ast, options);
+          printedDocument = printQuery(ast, options);
+          break;
         case 'mutation':
-          return printOperation(ast, options);
+          printedDocument = printOperation(ast, options);
+          break;
       }
       break;
     case kinds.FRAGMENT_DEFINITION:
-      return printQueryFragment(ast, options);
+      printedDocument = printQueryFragment(ast, options);
+      break;
   }
-  throw new Error('unexpected type: ' + ast.kind);
+  if (!printedDocument) {
+    throw new Error('unexpected type: ' + ast.kind);
+  }
+
+  return t.functionExpression(null, options.substitutions.map(function (sub) {
+    return t.identifier(sub);
+  }), t.blockStatement([t.variableDeclaration('var', [t.variableDeclarator(t.identifier('GraphQL'), t.memberExpression(identify(options.rqlFunctionName), t.identifier('__GraphQL')))]), t.returnStatement(printedDocument)]));
 };
 
 function printQueryFragment(fragment, options) {
-  var argsCode = getFragmentCode(fragment, options);
-  var substitutionNames = options.substitutions.join(', ');
-  return [
-    'function(' + substitutionNames + ') {',
-      'var GraphQL = ' + options.rqlFunctionName + '.__GraphQL;',
-      'return new GraphQL.QueryFragment(' + argsCode + ');',
-    '}'
-  ].join('');
-}
-
-function printInlineFragment(fragment, options) {
-  var argsCode = getFragmentCode(fragment, options);
-  return 'new GraphQL.QueryFragment(' + argsCode + ')';
-}
-
-function getFragmentCode(fragment, options) {
   var typeName = getTypeName(fragment);
   var type = options.schema.getType(typeName);
   if (!type) {
@@ -70,28 +75,17 @@ function getFragmentCode(fragment, options) {
   if (hasIdField(type)) {
     requisiteFields.id = true;
   }
+  if (types.isAbstractType(type)) {
+    requisiteFields.__typename = true;
+  }
 
-  var fieldsAndFragments = printFieldsAndFragments(
-    fragment.selectionSet,
-    type,
-    options,
-    requisiteFields,
-    typeName
-  );
-
+  var fieldsAndFragments = printFieldsAndFragments(fragment.selectionSet, type, options, requisiteFields, typeName);
   var fields = fieldsAndFragments.fields;
   var fragments = fieldsAndFragments.fragments;
+  var directives = printDirectives(fragment.directives);
   var metadata = getRelayDirectiveMetadata(fragment);
 
-  var metadataCode = stringifyObject(metadata);
-
-  return getFunctionArgCode([
-    JSON.stringify(getName(fragment)),
-    JSON.stringify(getTypeName(fragment)),
-    fields,
-    fragments,
-    metadataCode
-  ]);
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('QueryFragment')), trimArguments([t.literal(getName(fragment)), t.literal(getTypeName(fragment)), fields, fragments, objectify(metadata), directives]));
 }
 
 /**
@@ -108,39 +102,28 @@ function printQuery(query, options) {
   // Validate the name of the root call. Throws if it doesn't exist.
   var rootField = selections[0];
   var rootCallName = getName(rootField);
-  var rootCallDecl = getFieldDef(
-    options.schema,
-    options.schema.getQueryType(),
-    rootField
-  );
-  var type = rootCallDecl.type;
+  var rootCallDecl = getFieldDef(options.schema, options.schema.getQueryType(), rootField);
+  var type = types.getNamedType(rootCallDecl.type);
 
   var requisiteFields = {};
   var rootCall = getRootCallForType(options.schema, type);
   if (rootCall) {
     requisiteFields[rootCall.arg] = true;
   }
+  if (types.isAbstractType(type)) {
+    requisiteFields.__typename = true;
+  }
 
-  var callArgsCode = printArguments(rootField.arguments[0], options);
+  var printedArgs = printArguments(rootField.arguments[0], options);
 
-  var fieldsAndFragments = printFieldsAndFragments(
-    rootField.selectionSet,
-    type,
-    options,
-    requisiteFields,
-    types.getNamedType(type).name
-  );
+  var fieldsAndFragments = printFieldsAndFragments(rootField.selectionSet, type, options, requisiteFields, types.getNamedType(type).name);
   var fields = fieldsAndFragments.fields;
   var fragments = fieldsAndFragments.fragments;
-
+  var directives = printDirectives(rootField.directives);
   var metadata = {};
 
   if (rootCallDecl.args.length > 1) {
-    throw new Error(util.format(
-      'Invalid root field `%s`; Relay only supports root fields with zero or ' +
-      'one argument',
-      rootCallName
-    ));
+    throw new Error(util.format('Invalid root field `%s`; Relay only supports root fields with zero or ' + 'one argument', rootCallName));
   } else if (rootCallDecl.args.length === 1) {
     metadata.rootArg = rootCallDecl.args[0].name;
 
@@ -150,25 +133,7 @@ function printQuery(query, options) {
     }
   }
 
-  var metadataCode = stringifyObject(metadata);
-
-  var argsCode = getFunctionArgCode([
-    JSON.stringify(getName(rootField)),
-    callArgsCode,
-    fields,
-    fragments,
-    metadataCode,
-    JSON.stringify(getName(query))
-  ]);
-
-  var substitutionNames = options.substitutions.join(', ');
-
-  return (
-    'function(' + substitutionNames + ') {' +
-      'var GraphQL = ' + options.rqlFunctionName + '.__GraphQL;' +
-      'return new GraphQL.Query(' + argsCode + ');' +
-    '}'
-  );
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('Query')), trimArguments([t.literal(getName(rootField)), printedArgs, fields, fragments, objectify(metadata), t.literal(getName(query)), directives]));
 }
 
 function printOperation(operation, options) {
@@ -183,126 +148,87 @@ function printOperation(operation, options) {
   }
 
   var className = 'Mutation';
-  var field = getFieldDef(
-    options.schema,
-    options.schema.getMutationType(),
-    rootField
-  );
+  var field = getFieldDef(options.schema, options.schema.getMutationType(), rootField);
   if (!field) {
-    throw new Error(
-      'Provided mutation ' + getName(rootField) + ' does not exist in schema.'
-    );
+    throw new Error('Provided mutation ' + getName(rootField) + ' does not exist in schema.');
   }
   var type = types.getNamedType(field.type);
-  var requisiteFields = {clientMutationId: true};
+  var requisiteFields = { clientMutationId: true };
 
-  var callCode =
-    'new GraphQL.Callv(' +
-    getFunctionArgCode([
-      JSON.stringify(getName(rootField)),
-      printCallVariable('input')
-    ]) +
-    ')';
+  var printedCall = t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('Callv')), trimArguments([t.literal(getName(rootField)), printCallVariable('input')]));
 
   if (field.args.length !== 1) {
-    throw new Error(util.format(
-      'Expected operation `%s` to have a single input field.',
-      getName(rootField)
-    ));
+    throw new Error(util.format('Expected operation `%s` to have a single input field.', getName(rootField)));
   }
   var metadata = {
     inputType: field.args[0].type.toString()
   };
-  var fieldsAndFragments = printFieldsAndFragments(
-    rootField.selectionSet,
-    type,
-    options,
-    requisiteFields,
-    type.name
-  );
+  var fieldsAndFragments = printFieldsAndFragments(rootField.selectionSet, type, options, requisiteFields, type.name);
   var fields = fieldsAndFragments.fields;
   var fragments = fieldsAndFragments.fragments;
 
-  var argsCode = getFunctionArgCode([
-    JSON.stringify(getName(operation)),
-    JSON.stringify(type.name),
-    callCode,
-    fields,
-    fragments,
-    stringifyObject(metadata)
-  ]);
-
-  var substitutionNames = options.substitutions.join(', ');
-
-  return (
-    'function(' + substitutionNames + ') {' +
-      'var GraphQL = ' + options.rqlFunctionName + '.__GraphQL;' +
-      'return new GraphQL.' + className + '(' + argsCode + ');' +
-    '}'
-  );
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier(className)), trimArguments([t.literal(getName(operation)), t.literal(type.name), printedCall, fields, fragments, objectify(metadata)]));
 }
 
-function printFieldsAndFragments(
-  selectionSet,
-  type,
-  options,
-  requisiteFields,
-  parentType
-) {
+function printFieldsAndFragments(selectionSet, type, options, requisiteFields, parentType) {
   var fields = [];
   var fragments = [];
   if (selectionSet && selectionSet.selections) {
-    selectionSet.selections.forEach(function(selection) {
+    selectionSet.selections.forEach(function (selection) {
       if (selection.kind === kinds.FRAGMENT_SPREAD) {
         // We assume that all spreads were added by us
+        if (selection.directives && selection.directives.length) {
+          throw new Error('Directives are not yet supported for `${fragment}`-style ' + 'fragment references.');
+        }
         fragments.push(printFragmentReference(getName(selection), options));
       } else if (selection.kind === kinds.INLINE_FRAGMENT) {
-        fragments.push(printInlineFragment(selection, options));
+        fragments.push(printQueryFragment(selection, options));
       } else if (selection.kind === kinds.FIELD) {
         fields.push(selection);
+
+        if (getConnectionMetadataForType(type) && getName(selection) === 'edges' && type.getFields()['pageInfo']) {
+          requisiteFields.pageInfo = true;
+        }
       } else {
-        throw new Error(util.format(
-          'Unsupported selection type `%s`.',
-          selection.kind
-        ));
+        throw new Error(util.format('Unsupported selection type `%s`.', selection.kind));
       }
     });
-  }
-  var fragmentsCode = null;
-  if (fragments.length) {
-    fragmentsCode = '[' + fragments.join(',') + ']';
   }
 
   return {
     fields: printFields(fields, type, options, requisiteFields, parentType),
-    fragments: fragmentsCode,
+    fragments: fragments.length ? t.arrayExpression(fragments) : NULL
   };
 }
 
-function printArguments(args, options) {
+function printArguments(args) {
   if (!args) {
-    return null;
+    return NULL;
   }
   var value = args.value;
   if (value.kind === kinds.LIST) {
-    return '[' + value.values.map(function(arg) {
-      return printArgument(arg, options)
-    }).join(', ') + ']';
+    return t.arrayExpression(value.values.map(function (arg) {
+      return printArgument(arg);
+    }));
   } else {
-    return printArgument(value, options);
+    return printArgument(value);
   }
 }
 
-function printArgument(arg, options) {
+function printArgument(arg) {
+  var value;
   switch (arg.kind) {
     case kinds.INT:
-      return JSON.stringify(parseInt(arg.value, 10));
+      value = parseInt(arg.value, 10);
+      break;
     case kinds.FLOAT:
-      return JSON.stringify(parseFloat(arg.value));
+      value = parseFloat(arg.value);
+      break;
     case kinds.STRING:
     case kinds.ENUM:
     case kinds.BOOLEAN:
-      return JSON.stringify(arg.value);
+      value = arg.value;
+      break;
     case kinds.VARIABLE:
       if (!arg.name || arg.name.kind !== kinds.NAME) {
         throw new Error('Expected variable to have a name');
@@ -311,64 +237,56 @@ function printArgument(arg, options) {
     default:
       throw new Error('Unexpected arg kind: ' + arg.kind);
   }
+  return printCallValue(value);
 }
 
 function printCallVariable(name) {
-  return 'new GraphQL.CallVariable(' + JSON.stringify(name) + ')';
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('CallVariable')), [t.literal(name)]);
+}
+
+function printCallValue(value) {
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('CallValue')), [t.literal(value)]);
 }
 
 function printFields(fields, type, options, requisiteFields, parentType) {
   var generateFields = {};
-  Object.keys(requisiteFields).forEach(function(name) {
+  Object.keys(requisiteFields).forEach(function (name) {
     generateFields[name] = true;
   });
 
-  var fieldStrings = fields.map(function(field) {
+  var printedFields = fields.map(function (field) {
     var fieldName = getName(field);
     delete generateFields[fieldName];
     return printField(field, type, options, requisiteFields, false, parentType);
   });
-  Object.keys(generateFields).forEach(function(fieldName) {
+  Object.keys(generateFields).forEach(function (fieldName) {
     var generatedAST = {
       kind: kinds.FIELD,
       name: { kind: kinds.NAME, value: fieldName },
-      selectionSet: {selections: []},
-      arguments: [],
+      selectionSet: { selections: [] },
+      arguments: []
     };
-    fieldStrings.push(
-      printField(generatedAST, type, options, requisiteFields, true, parentType)
-    );
+    printedFields.push(printField(generatedAST, type, options, requisiteFields, true, parentType));
   });
-  if (fieldStrings.length === 0) {
-    return null;
+  if (printedFields.length === 0) {
+    return NULL;
   }
-  return '[' + fieldStrings.join(', ') + ']';
+  return t.arrayExpression(printedFields);
 }
 
 function printFragmentReference(substitutionName, options) {
-  return options.rqlFunctionName + '.__frag(' + substitutionName + ')';
+  return t.callExpression(t.memberExpression(identify(options.rqlFunctionName), t.identifier('__frag')), [t.identifier(substitutionName)]);
 }
 
-function printField(
-  field,
-  type,
-  options,
-  requisiteFields,
-  isGenerated,
-  parentType
-) {
+function printField(field, type, options, requisiteFields, isGenerated, parentType) {
   var fieldName = getName(field);
   var fieldDecl = getFieldDef(options.schema, type, field);
   var metadata = {
-    parentType: parentType,
+    parentType: parentType
   };
 
   if (!fieldDecl) {
-    throw new Error(util.format(
-      'Type "%s" doesn\'t have a field "%s".',
-      type.name,
-      fieldName
-    ));
+    throw new Error(util.format('Type `%s` doesn\'t have a field `%s`.', type.name, fieldName));
   }
 
   var subRequisiteFields = {};
@@ -390,7 +308,7 @@ function printField(
     metadata.pk = 'id';
   }
 
-  var connectionMetadata = getConnectionMetadata(options.schema, fieldDecl);
+  var connectionMetadata = getConnectionMetadata(fieldDecl);
   if (connectionMetadata) {
     metadata.connection = true;
 
@@ -399,50 +317,26 @@ function printField(
     }
 
     if (hasArgument(field, 'first') && hasArgument(field, 'before')) {
-      throw new Error(util.format(
-        'Connections arguments `%s(before: <cursor>, first: <count>)` are ' +
-        'not supported. Use `(first: <count>)` or ' +
-        '`(after: <cursor>, first: <count>)`. ',
-        fieldName
-      ));
+      throw new Error(util.format('Connections arguments `%s(before: <cursor>, first: <count>)` are ' + 'not supported. Use `(first: <count>)`, ' + '`(after: <cursor>, first: <count>)`, or ' + '`(before: <cursor>, last: <count>)`.', fieldName));
     }
     if (hasArgument(field, 'last') && hasArgument(field, 'after')) {
-      throw new Error(util.format(
-        'Connections arguments `%s(after: <cursor>, last: <count>)` are ' +
-        'not supported. Use `(last: <count>)` or ' +
-        '`(before: <cursor>, last: <count>)`. ',
-        fieldName
-      ));
+      throw new Error(util.format('Connections arguments `%s(after: <cursor>, last: <count>)` are ' + 'not supported. Use `(last: <count>)`, ' + '`(before: <cursor>, last: <count>)`, or ' + '`(after: <cursor>, first: <count>)`.', fieldName));
     }
 
     var hasEdgesSelection = false;
     var selections = getSelections(field);
-    selections.forEach(function(subfield) {
+    selections.forEach(function (subfield) {
       if (subfield.kind !== kinds.FIELD) {
         return;
       }
       var subfieldName = getName(subfield);
-      var subfieldDecl =
-        types.getNamedType(fieldDecl.type).getFields()[subfieldName];
+      var subfieldDecl = types.getNamedType(fieldDecl.type).getFields()[subfieldName];
       var subfieldType = types.getNamedType(subfieldDecl.type);
-      if (subfieldName === 'edges') {
-        hasEdgesSelection = true;
-      } else if (
-        isList(subfieldDecl.type) &&
-        subfieldType.name === connectionMetadata.nodeType.name
-      ) {
+      if (subfieldName !== 'edges' && isList(subfieldDecl.type) && subfieldType.name === connectionMetadata.nodeType.name) {
         // Detect eg `nodes{...}` instead of `edges{node{...}}`
-        throw new Error(util.format(
-          'Unsupported `%s{...}` field on connection `%s`. Use ' +
-          '`edges{node{...}}` instead.',
-          subfieldName,
-          fieldName
-        ));
+        throw new Error(util.format('Unsupported `%s{...}` field on connection `%s`. Use ' + '`edges{node{...}}` instead.', subfieldName, fieldName));
       }
     });
-    if (hasEdgesSelection && !!fieldDecl.type.getFields()['pageInfo']) {
-      subRequisiteFields.pageInfo = true;
-    }
   } else if (types.getNamedType(fieldDecl.type).name === 'PageInfo') {
     subRequisiteFields.hasNextPage = true;
     subRequisiteFields.hasPreviousPage = true;
@@ -453,21 +347,17 @@ function printField(
 
   if (types.isAbstractType(fieldDecl.type)) {
     metadata.dynamic = true;
+    subRequisiteFields.__typename = true;
   }
 
   if (isList(fieldDecl.type)) {
     metadata.plural = true;
   }
 
-  var fieldsAndFragments = printFieldsAndFragments(
-    field.selectionSet,
-    fieldDecl.type,
-    options,
-    subRequisiteFields,
-    types.getNamedType(fieldDecl.type).name
-  );
+  var fieldsAndFragments = printFieldsAndFragments(field.selectionSet, fieldDecl.type, options, subRequisiteFields, types.getNamedType(fieldDecl.type).name);
   var fields = fieldsAndFragments.fields;
   var fragments = fieldsAndFragments.fragments;
+  var directives = printDirectives(field.directives);
 
   if (isGenerated) {
     metadata.generated = true;
@@ -476,42 +366,45 @@ function printField(
     metadata.requisite = true;
   }
 
-  var callsCode = printCalls(field, fieldDecl, options);
+  var calls = printCalls(field, fieldDecl);
+  var fieldAlias = field.alias ? field.alias.value : null;
 
-  var fieldAliasCode = field.alias ?
-    JSON.stringify(field.alias.value) :
-    null;
-  var metadataCode = stringifyObject(metadata);
+  return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('Field')), trimArguments([t.literal(fieldName), fields, fragments, calls, t.literal(fieldAlias), NULL, objectify(metadata), directives]));
+}
 
-  var argsCode = getFunctionArgCode([
-    JSON.stringify(fieldName),
-    fields,
-    fragments,
-    callsCode,
-    fieldAliasCode,
-    null,
-    metadataCode
-  ]);
-
-  return 'new GraphQL.Field(' + argsCode + ')';
+function printDirectives(directives) {
+  if (!directives || !directives.length) {
+    return NULL;
+  }
+  var printedDirectives;
+  directives.forEach(function (directive) {
+    var name = getName(directive);
+    if (name === 'relay') {
+      return;
+    }
+    printedDirectives = printedDirectives || [];
+    printedDirectives.push(t.objectExpression([property('name', t.literal(getName(directive))), property('arguments', t.arrayExpression(directive.arguments.map(function (argument) {
+      return t.objectExpression([property('name', t.literal(getName(argument))), property('value', printArgument(argument.value))]);
+    })))]));
+  });
+  if (!printedDirectives) {
+    return NULL;
+  }
+  return t.arrayExpression(printedDirectives);
 }
 
 function printCalls(field, fieldDecl, options) {
   if (field.arguments.length === 0) {
-    return null;
+    return NULL;
   }
 
   // Each GraphQL RFC argument is mapped to a separate call. For GraphQL FB
   // calls with multiple arguments, we use GraphQL RFC array literals.
-  var callStrings = field.arguments.map(function(arg) {
+  var callStrings = field.arguments.map(function (arg) {
     var callName = getName(arg);
     var callDecl = getArgNamed(fieldDecl, callName);
     if (!callDecl) {
-      throw new Error(util.format(
-        'Unknown call "%s" on field "%s".',
-        callName,
-        fieldDecl.name
-      ));
+      throw new Error(util.format('Unknown call "%s" on field "%s".', callName, fieldDecl.name));
     }
 
     var metadata = {};
@@ -519,17 +412,9 @@ function printCalls(field, fieldDecl, options) {
     if (typeName) {
       metadata.type = typeName;
     }
-    return (
-      'new GraphQL.Callv(' +
-        getFunctionArgCode([
-          JSON.stringify(callName),
-          printArguments(arg, options),
-          stringifyObject(metadata),
-        ]) +
-      ')'
-    );
+    return t.newExpression(t.memberExpression(t.identifier('GraphQL'), t.identifier('Callv')), trimArguments([t.literal(callName), printArguments(arg), objectify(metadata)]));
   });
-  return '[' + callStrings.join(', ') + ']';
+  return t.arrayExpression(callStrings);
 }
 
 /**
@@ -543,7 +428,7 @@ function printCalls(field, fieldDecl, options) {
  */
 function getRelayDirectiveMetadata(node) {
   var relayDirective;
-  node.directives.forEach(function(directive) {
+  node.directives.forEach(function (directive) {
     if (getName(directive) === 'relay') {
       relayDirective = directive;
     }
@@ -551,7 +436,7 @@ function getRelayDirectiveMetadata(node) {
   if (!relayDirective) {
     return;
   }
-  return relayDirective.arguments.reduce(function(acc, arg) {
+  return relayDirective.arguments.reduce(function (acc, arg) {
     acc[getName(arg)] = getScalarValue(arg);
     return acc;
   }, {});
@@ -567,10 +452,7 @@ function getScalarValue(node) {
       return parseInt(value, 10);
     } else {
       if (kind !== 'StringValue') {
-        throw new Error(
-          'Expected `@relay(...)` argument values to be scalars, got ' +
-          kind
-        );
+        throw new Error('Expected `@relay(...)` argument values to be scalars, got ' + kind);
       }
       return value;
     }
@@ -579,10 +461,7 @@ function getScalarValue(node) {
 
 function getTypeForMetadata(type) {
   var namedType = types.getNamedType(type);
-  if (
-    namedType instanceof types.GraphQLEnumType ||
-    namedType instanceof types.GraphQLInputObjectType
-  ) {
+  if (namedType instanceof types.GraphQLEnumType || namedType instanceof types.GraphQLInputObjectType) {
     return String(type);
   } else if (namedType instanceof types.GraphQLScalarType) {
     return null;
@@ -662,13 +541,14 @@ function alwaysImplementsNode(schema, type) {
 
 function getRootCallForType(schema, type) {
   if (alwaysImplementsNode(schema, type)) {
-    return {name: 'node', arg: 'id'};
+    return { name: 'node', arg: 'id' };
   }
   return null;
 }
 
 function isConnectionType(type) {
-  return /.+Connection$/.test(type.name);
+  return (/.+Connection$/.test(type.name)
+  );
 }
 
 function hasIdField(type) {
@@ -677,27 +557,31 @@ function hasIdField(type) {
 
 function isEdgeType(type) {
   var namedType = types.getNamedType(type);
-  return /.+Edge$/.test(namedType.name) &&
-    !!namedType.getFields()['node'] &&
-    !!namedType.getFields()['cursor'];
+  return (/.+Edge$/.test(namedType.name) && !!namedType.getFields()['node'] && !!namedType.getFields()['cursor']
+  );
 }
 
 function getArgNamed(field, name) {
   var remaining = field.args.filter(function (arg) {
-    return (arg.name === name);
+    return arg.name === name;
   });
   return remaining.length === 1 ? remaining[0] : null;
 }
 
-function getConnectionMetadata(schema, fieldDecl) {
-  if (!isConnectionType(fieldDecl.type)) {
-    return null;
-  }
+function getConnectionMetadata(fieldDecl) {
   // Connections must be limitable.
   if (!getArgNamed(fieldDecl, 'first') && !getArgNamed(fieldDecl, 'last')) {
     return null;
   }
-  var fieldType = types.getNamedType(fieldDecl.type);
+  return getConnectionMetadataForType(fieldDecl.type);
+}
+
+function getConnectionMetadataForType(type) {
+  if (!isConnectionType(type)) {
+    return null;
+  }
+
+  var fieldType = types.getNamedType(type);
 
   // Connections must have a non-scalar `edges` field.
   var edgesField = fieldType.getFields()['edges'];
@@ -746,52 +630,58 @@ function getConnectionMetadata(schema, fieldDecl) {
  * https://github.com/graphql/graphql-js/blob/81a7d7add03adbb14dc852bbe45ab030c0601489/src/utilities/TypeInfo.js#L212-L237
  */
 function getFieldDef(schema, parentType, field) {
+  parentType = types.getNamedType(parentType);
   var fieldName = getName(field);
-  if (fieldName === SchemaMetaFieldDef.name &&
-      schema.getQueryType() === parentType) {
+  if (fieldName === SchemaMetaFieldDef.name && schema.getQueryType() === parentType) {
     return SchemaMetaFieldDef;
   }
-  if (fieldName === TypeMetaFieldDef.name &&
-      schema.getQueryType() === parentType) {
+  if (fieldName === TypeMetaFieldDef.name && schema.getQueryType() === parentType) {
     return TypeMetaFieldDef;
   }
-  if (fieldName === TypeNameMetaFieldDef.name &&
-      (parentType instanceof types.GraphQLObjectType ||
-       parentType instanceof types.GraphQLInterfaceType ||
-       parentType instanceof types.GraphQLUnionType)
-  ) {
+  if (fieldName === TypeNameMetaFieldDef.name && (parentType instanceof types.GraphQLObjectType || parentType instanceof types.GraphQLInterfaceType || parentType instanceof types.GraphQLUnionType)) {
     return TypeNameMetaFieldDef;
   }
   return types.getNamedType(parentType).getFields()[fieldName];
 }
 
-function trimArray(arr) {
+function objectify(obj) {
+  if (obj == null) {
+    return NULL;
+  }
+  var keys = Object.keys(obj);
+  if (!keys.length) {
+    return NULL;
+  }
+  return t.objectExpression(keys.map(function (key) {
+    return property(key, t.literal(obj[key]));
+  }));
+}
+
+function identify(str) {
+  return str.split('.').reduce(function (acc, name) {
+    if (!acc) {
+      return t.identifier(name);
+    }
+    return t.memberExpression(acc, t.identifier(name));
+  }, null);
+}
+
+function property(name, value) {
+  return t.property('init', t.identifier(name), value);
+}
+
+function trimArguments(args) {
   var lastIndex = -1;
-  for (var ii = arr.length - 1; ii >= 0; ii--) {
-    if (arr[ii] !== null) {
+  for (var ii = args.length - 1; ii >= 0; ii--) {
+    if (args[ii] == null) {
+      throw new Error('Use `NULL` to indicate that output should be the literal value `null`.');
+    }
+    if (args[ii] !== NULL) {
       lastIndex = ii;
       break;
     }
   }
-  arr.length = lastIndex + 1;
-  return arr;
-}
-
-function stringifyObject(obj) {
-  for (var ii in obj) {
-    if (obj.hasOwnProperty(ii)) {
-      return JSON.stringify(obj);
-    }
-  }
-  return null;
-}
-
-function getFunctionArgCode(arr) {
-  return trimArray(arr)
-    .map(function(arg) {
-      return arg === null ? 'null' : arg;
-    })
-    .join(', ');
+  return args.slice(0, lastIndex + 1);
 }
 
 function getSelections(node) {
@@ -810,4 +700,4 @@ function hasArgument(field, argumentName) {
   return false;
 }
 
-module.exports = GraphQLPrinter;
+module.exports = RelayQLPrinter;

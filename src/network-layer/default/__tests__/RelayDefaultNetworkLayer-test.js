@@ -75,21 +75,21 @@ describe('RelayDefaultNetworkLayer', () => {
       responseCallback = jest.genMockFunction();
       rejectCallback = jest.genMockFunction();
 
-      var mutation = RelayQuery.Node.buildMutation(
-        'FeedbackLikeMutation',
-        'FeedbackLikeResponsePayload',
-        'feedback_like',
-        null,
-        [RelayQuery.Node.buildField('does_viewer_like')],
-        {inputType: 'FeedbackLikeInput'}
-      );
       variables = {
         input: {
           [RelayConnectionInterface.CLIENT_MUTATION_ID]: 'client:a',
           actor_id: 4,
         },
       };
-      request = new RelayMutationRequest(mutation, variables);
+      var mutation = RelayQuery.Mutation.build(
+        'FeedbackLikeMutation',
+        'FeedbackLikeResponsePayload',
+        'feedback_like',
+        variables.input,
+        [RelayQuery.Field.build('does_viewer_like')],
+        {inputType: 'FeedbackLikeInput'}
+      );
+      request = new RelayMutationRequest(mutation);
       request.getPromise().then(responseCallback).catch(rejectCallback);
     });
 
@@ -109,7 +109,9 @@ describe('RelayDefaultNetworkLayer', () => {
       });
       expect(body).toEqual(JSON.stringify({
         query: request.getQueryString(),
-        variables: variables,
+        variables: {
+          input_0: variables.input,
+        },
       }));
     });
 
@@ -167,6 +169,33 @@ describe('RelayDefaultNetworkLayer', () => {
       ].join('\n'));
       expect(error.source).toEqual(response);
     });
+
+    it('handles custom errors', () => {
+      var response = {
+        errors: [{
+          message: 'Something went wrong.'
+        }]
+      };
+
+      expect(fetch).not.toBeCalled();
+      networkLayer.sendMutation(request);
+      expect(fetch).toBeCalled();
+
+      fetch.mock.deferreds[0].resolve(genResponse(response));
+      jest.runAllTimers();
+
+      expect(rejectCallback.mock.calls.length).toBe(1);
+      var error = rejectCallback.mock.calls[0][0];
+      expect(error instanceof Error).toBe(true);
+      expect(error.message).toEqual([
+        'Server request for mutation \`FeedbackLikeMutation\` failed for the ' +
+          'following reasons:',
+        '',
+        '1. Something went wrong.'
+      ].join('\n'));
+      expect(error.source).toEqual(response);
+    })
+
   });
 
   describe('sendQueries', () => {
@@ -178,8 +207,12 @@ describe('RelayDefaultNetworkLayer', () => {
 
     beforeEach(() => {
       route = RelayMetaRoute.get('$fetchRelayQuery');
-      queryA = RelayQuery.Node.create(Relay.QL`query{node(id:"123"){id}}`, route, {});
-      queryB = RelayQuery.Node.create(Relay.QL`query{node(id:"456"){id}}`, route, {});
+      queryA = RelayQuery.Root.create(
+        Relay.QL`query{node(id:"123"){id}}`, route, {}
+      );
+      queryB = RelayQuery.Root.create(
+        Relay.QL`query{node(id:"456"){id}}`, route, {}
+      );
       requestA = new RelayQueryRequest(queryA);
       requestB = new RelayQueryRequest(queryB);
     });

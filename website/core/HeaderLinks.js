@@ -1,9 +1,17 @@
 /**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
  * @providesModule HeaderLinks
 */
 
 var HeaderLinks = React.createClass({
   links: [
+    {section: 'playground', href: '/relay/prototyping/playground.html', text: 'Try it out'},
     {section: 'docs', href: '/relay/docs/getting-started.html#content', text: 'Docs'},
     {section: 'support', href: '/relay/support.html', text: 'Support'},
     {section: 'github', href: 'https://github.com/facebook/relay', text: 'GitHub'},

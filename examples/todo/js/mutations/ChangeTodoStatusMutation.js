@@ -1,3 +1,14 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+import Relay from 'react-relay';
+
 export default class ChangeTodoStatusMutation extends Relay.Mutation {
   static fragments = {
     todo: () => Relay.QL`
@@ -9,9 +20,7 @@ export default class ChangeTodoStatusMutation extends Relay.Mutation {
     viewer: () => Relay.QL`
       fragment on User {
         id,
-        todos {
-          completedCount,
-        },
+        completedCount,
       }
     `,
   };
@@ -25,9 +34,8 @@ export default class ChangeTodoStatusMutation extends Relay.Mutation {
           complete,
         },
         viewer {
-          todos {
-            completedCount,
-          },
+          completedCount,
+          todos,
         },
       }
     `;
@@ -48,14 +56,11 @@ export default class ChangeTodoStatusMutation extends Relay.Mutation {
     };
   }
   getOptimisticResponse() {
-    var viewerPayload;
-    if (this.props.viewer.todos) {
-      viewerPayload = {id: this.props.viewer.id, todos: {}};
-      if (this.props.viewer.todos.completedCount != null) {
-        viewerPayload.todos.completedCount = this.props.complete
-          ? this.props.viewer.todos.completedCount + 1
-          : this.props.viewer.todos.completedCount - 1;
-      }
+    var viewerPayload = {id: this.props.viewer.id};
+    if (this.props.viewer.completedCount != null) {
+      viewerPayload.completedCount = this.props.complete ?
+        this.props.viewer.completedCount + 1 :
+        this.props.viewer.completedCount - 1;
     }
     return {
       todo: {

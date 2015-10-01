@@ -25,7 +25,8 @@ var RelayConnectionInterface = require('RelayConnectionInterface');
 var RelayMockCacheManager = require('RelayMockCacheManager');
 var RelayMutationType = require('RelayMutationType');
 var RelayStoreData = require('RelayStoreData');
-var generateRQLFieldAlias = require('generateRQLFieldAlias');
+
+var transformRelayQueryPayload = require('transformRelayQueryPayload');
 
 describe('RelayStoreData', function() {
   var cacheManager;
@@ -104,7 +105,7 @@ describe('RelayStoreData', function() {
 
   it('caches node metadata', () => {
     var query = getNode(Relay.QL`query{node(id:"123"){id}}`);
-    var response = {'123': {id: '123'}};
+    var response = {node: {id: '123'}};
     storeData.handleQueryPayload(query, response);
 
     expect(cacheManager).toContainCalledMethods({
@@ -122,7 +123,7 @@ describe('RelayStoreData', function() {
 
   it('caches custom root calls', () => {
     var query = getNode(Relay.QL`query{username(name:"yuzhi"){id}}`);
-    var response = {yuzhi: {id: '123'}};
+    var response = {username: {id: '123'}};
     storeData.handleQueryPayload(query, response);
 
     expect(cacheManager).toContainCalledMethods({
@@ -175,7 +176,7 @@ describe('RelayStoreData', function() {
       }
     `);
     var response = {
-      '123': {
+      node: {
         id: '123',
         hometown: {
           id: '456',
@@ -216,7 +217,7 @@ describe('RelayStoreData', function() {
       }
     `);
     var response = {
-      '123': {
+      node: {
         id: '123',
         screennames: [
           {service: 'GTALK'},
@@ -274,10 +275,10 @@ describe('RelayStoreData', function() {
         }
       }
     `);
-    var response = {
-      '123': {
+    var response = transformRelayQueryPayload(query, {
+      node: {
         id: '123',
-        [generateRQLFieldAlias('friends.first(2)')]: {
+        friends: {
           edges: [
             {
               node: {
@@ -298,7 +299,7 @@ describe('RelayStoreData', function() {
           },
         },
       },
-    };
+    });
     storeData.handleQueryPayload(query, response);
 
     expect(cacheManager).toContainCalledMethods({
@@ -362,10 +363,10 @@ describe('RelayStoreData', function() {
         }
       }
     `);
-    var response = {
-      '123': {
+    var response = transformRelayQueryPayload(query, {
+      node: {
         id: '123',
-        [generateRQLFieldAlias('friends.first(2)')]: {
+        friends: {
           edges: [],
           [PAGE_INFO]: {
             [HAS_PREV_PAGE]: false,
@@ -373,7 +374,7 @@ describe('RelayStoreData', function() {
           },
         },
       },
-    };
+    });
     storeData.handleQueryPayload(query, response);
 
     expect(cacheManager).toContainCalledMethods({
@@ -399,7 +400,7 @@ describe('RelayStoreData', function() {
 
   it('caches simple mutations', () => {
     var query = getNode(Relay.QL`query{node(id:"123"){id,doesViewerLike}}`);
-    var response = {'123': {id: '123', doesViewerLike: false}};
+    var response = {node: {id: '123', doesViewerLike: false}};
     storeData.handleQueryPayload(query, response);
 
     var prevCallCount = cacheManager.cacheField.mock.calls.length;
@@ -460,10 +461,10 @@ describe('RelayStoreData', function() {
         }
       }
     `);
-    var response = {
-      '123': {
+    var response = transformRelayQueryPayload(query, {
+      node: {
         id: '123',
-        [generateRQLFieldAlias('comments.first(1)')]: {
+        comments: {
           count: 2,
           edges: [
             {
@@ -479,7 +480,7 @@ describe('RelayStoreData', function() {
           },
         },
       }
-    };
+    });
     storeData.handleQueryPayload(query, response);
 
     var configs = [{
@@ -581,10 +582,10 @@ describe('RelayStoreData', function() {
         }
       }
     `);
-    var response = {
-      '123': {
+    var response = transformRelayQueryPayload(query, {
+      node: {
         id: '123',
-        [generateRQLFieldAlias('comments.first(1)')]: {
+        comments: {
           count: 2,
           edges: [
             {
@@ -600,7 +601,7 @@ describe('RelayStoreData', function() {
           },
         },
       }
-    };
+    });
     storeData.handleQueryPayload(query, response);
 
     var configs = [{

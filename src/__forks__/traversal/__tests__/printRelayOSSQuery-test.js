@@ -24,10 +24,6 @@ var printRelayOSSQuery = require('printRelayOSSQuery');
 describe('printRelayOSSQuery', () => {
   var {getNode} = RelayTestUtils;
 
-  function trimQuery(str) {
-    return str.replace(/\s*(\{|\})\s*/g, '$1').replace(/,\s+/g, ',').trim();
-  }
-
   beforeEach(() => {
     jest.resetModuleRegistry();
 
@@ -45,7 +41,7 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery {
           me {
             firstName,
@@ -53,7 +49,7 @@ describe('printRelayOSSQuery', () => {
             id
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -66,14 +62,15 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery {
           node(id:"123") {
             name,
-            id
+            id,
+            __typename
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -87,14 +84,15 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query FooQuery {
           node(id:123) {
             name,
-            id
+            id,
+            __typename
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -108,15 +106,16 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery {
           usernames(names:["a","b","c"]) {
             firstName,
             lastName,
-            id
+            id,
+            __typename
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -130,14 +129,15 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query FooQuery {
           nodes(ids:[123,456]) {
             name,
-            id
+            id,
+            __typename
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -153,13 +153,13 @@ describe('printRelayOSSQuery', () => {
         env: enumValue
       });
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query FooQuery($environment_0:Environment) {
           settings(environment:$environment_0) {
             notificationSounds
           }
         }
-      `));
+      `);
       expect(variables).toEqual({
         environment_0: enumValue,
       });
@@ -178,25 +178,25 @@ describe('printRelayOSSQuery', () => {
       });
 
       var {text, variables} = printRelayOSSQuery(query);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery($query_0:CheckinSearchInput) {
           checkinSearchQuery(query:$query_0) {
             query
           }
         }
-      `));
+      `);
       expect(variables).toEqual({
         query_0: objectValue,
       });
     });
 
     it('throws for ref queries', () => {
-      var query = RelayQuery.Node.buildRoot(
+      var query = RelayQuery.Root.build(
         RelayNodeInterface.NODE,
         new GraphQL.BatchCallVariable('q0', '$.*.actor.id'),
         [
-          RelayQuery.Node.buildField('id'),
-          RelayQuery.Node.buildField('name'),
+          RelayQuery.Field.build('id'),
+          RelayQuery.Field.build('name'),
         ],
         {
           isDeferred: true,
@@ -224,10 +224,11 @@ describe('printRelayOSSQuery', () => {
       `);
       var fragmentID = getNode(fragment).getFragmentID();
       var {text, variables} = printRelayOSSQuery(query);
-      expect(trimQuery(text)).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery {
           node(id:"123") {
             id,
+            __typename,
             ...${fragmentID},
             ...${fragmentID}
           }
@@ -236,7 +237,7 @@ describe('printRelayOSSQuery', () => {
           name,
           id
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
   });
@@ -251,13 +252,14 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Viewer {
           actor {
-            id
+            id,
+            __typename
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -272,9 +274,10 @@ describe('printRelayOSSQuery', () => {
       `);
       var fragmentID = getNode(nestedFragment).getFragmentID();
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(trimQuery(text)).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Node {
           id,
+          __typename,
           ...${fragmentID},
           ...${fragmentID}
         }
@@ -282,7 +285,7 @@ describe('printRelayOSSQuery', () => {
           name,
           id
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
   });
@@ -302,12 +305,13 @@ describe('printRelayOSSQuery', () => {
         }
       `, {first: 10});
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Viewer {
           ${alias}:newsFeed(first:10) {
             edges {
               node {
-                id
+                id,
+                __typename
               },
               cursor
             },
@@ -317,7 +321,7 @@ describe('printRelayOSSQuery', () => {
             }
           }
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -331,39 +335,40 @@ describe('printRelayOSSQuery', () => {
         }
       `);
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Actor {
           ${alias}:profilePicture(size:["32","64"]) {
             uri
           },
-          id
+          id,
+          __typename
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
     it('prints a field with multiple variable arguments', () => {
       var alias = generateRQLFieldAlias('profilePicture.size(32,64)');
-      var variables = {
-        height: 64,
-        width: 32,
-      };
       var fragment = getNode(Relay.QL`
         fragment on Actor {
           profilePicture(size:[$width,$height]) {
             uri
           }
         }
-      `, variables);
+      `, {
+        height: 64,
+        width: 32,
+      });
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Actor {
           ${alias}:profilePicture(size:[32,64]) {
             uri
           },
-          id
+          id,
+          __typename
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -389,7 +394,7 @@ describe('printRelayOSSQuery', () => {
       });
       var alias = fragment.getChildren()[0].getSerializationKey();
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(text).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Actor {
           ${alias}:friends(first:10,orderby:["name"],isViewerFriend:false) {
             edges {
@@ -403,9 +408,10 @@ describe('printRelayOSSQuery', () => {
               hasPreviousPage
             }
           },
-          id
+          id,
+          __typename
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
 
@@ -428,7 +434,7 @@ describe('printRelayOSSQuery', () => {
       var fragmentID = getNode(fragment, {env: enumValue}).getFragmentID();
       var alias = generateRQLFieldAlias('notifications.environment(WEB)');
       var {text, variables} = printRelayOSSQuery(query);
-      expect(trimQuery(text)).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         query PrintRelayOSSQuery($environment_0:Environment) {
           defaultSettings {
             ...${fragmentID}
@@ -437,7 +443,7 @@ describe('printRelayOSSQuery', () => {
         fragment ${fragmentID} on Settings {
           ${alias}:notifications(environment:$environment_0)
         }
-      `));
+      `);
       expect(variables).toEqual({
         environment_0: enumValue,
       });
@@ -457,10 +463,11 @@ describe('printRelayOSSQuery', () => {
       `);
       var fragmentID = getNode(nestedFragment).getFragmentID();
       var {text, variables} = printRelayOSSQuery(fragment);
-      expect(trimQuery(text)).toEqual(trimQuery(`
+      expect(text).toEqualPrintedQuery(`
         fragment PrintRelayOSSQuery on Viewer {
           actor {
             id,
+            __typename,
             ...${fragmentID},
             ...${fragmentID}
           }
@@ -469,40 +476,114 @@ describe('printRelayOSSQuery', () => {
           name,
           id
         }
-      `));
+      `);
       expect(variables).toEqual({});
     });
   });
 
   it('prints a mutation', () => {
+    var inputValue = {
+      clientMutationId: '123',
+      foo: 'bar',
+    };
     var mutation = getNode(Relay.QL`
       mutation {
         feedbackLike(input:$input) {
           clientMutationId,
           feedback {
             id,
+            actor {
+              profilePicture(preset: SMALL) {
+                uri,
+              },
+            },
             likeSentence,
-            likers
-          }
-        }
+            likers,
+          },
+        },
       }
-    `,
-      {input: ''}
-    );
+    `, {input: inputValue});
 
+    var alias = generateRQLFieldAlias('profilePicture.preset(SMALL)');
     var {text, variables} = printRelayOSSQuery(mutation);
-    expect(text).toEqual(trimQuery(`
-      mutation PrintRelayOSSQuery($input:FeedbackLikeInput) {
-        feedbackLike(input:$input) {
+    expect(text).toEqualPrintedQuery(`
+      mutation PrintRelayOSSQuery(
+        $input_0: FeedbackLikeInput,
+        $preset_1: PhotoSize
+      ) {
+        feedbackLike(input: $input_0) {
           clientMutationId,
           feedback {
             id,
+            actor {
+              ${alias}: profilePicture(preset: $preset_1) {
+                uri
+              },
+              id,
+              __typename
+            },
             likeSentence,
             likers
           }
         }
       }
-    `));
+    `);
+    expect(variables).toEqual({
+      input_0: inputValue,
+      preset_1: 'SMALL',
+    });
+  });
+
+  it('prints directives', () => {
+    var params = {cond: true};
+    var nestedFragment = Relay.QL`
+      fragment on User
+        @include(if: $cond)
+        @foo(int: 10, bool: true, str: "string")
+      {
+        name @skip(if: $cond)
+      }
+    `;
+    var query = getNode(Relay.QL`
+      query {
+        node(id: 123) @source(uri: "facebook.com") {
+          ${nestedFragment}
+        }
+      }
+    `, params);
+    var fragmentID = getNode(nestedFragment, params).getFragmentID();
+    var {text, variables} = printRelayOSSQuery(query);
+    expect(text).toEqualPrintedQuery(`
+      query PrintRelayOSSQuery {
+        node(id:123) @source(uri:"facebook.com") {
+          id,
+          __typename,
+          ...${fragmentID}
+        }
+      }
+      fragment ${fragmentID} on User
+        @include(if:true)
+        @foo(int:10, bool:true, str:"string")
+      {
+        name @skip(if:true),
+        id
+      }
+    `);
     expect(variables).toEqual({});
+  });
+
+  it('throws for directives with complex values', () => {
+    var params = {data: {foo: 'bar'}};
+    var query = getNode(Relay.QL`
+      query {
+        node(id: 123) @meta(data: $data) {
+          id
+        }
+      }
+    `, params);
+    expect(() => printRelayOSSQuery(query)).toFailInvariant(
+      'printRelayOSSQuery(): Relay only supports directives with scalar ' +
+      'values (boolean, number, or string), got `data: [object Object]`.'
+    );
   });
 });

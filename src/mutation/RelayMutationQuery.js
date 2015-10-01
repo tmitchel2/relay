@@ -22,6 +22,7 @@ var RelayMutationType = require('RelayMutationType');
 var RelayQuery = require('RelayQuery');
 import type RelayQueryTracker from 'RelayQueryTracker';
 var RelayStoreData = require('RelayStoreData');
+import type {Variables} from 'RelayTypes';
 
 var flattenRelayQuery = require('flattenRelayQuery');
 var forEachObject = require('forEachObject');
@@ -272,7 +273,7 @@ var RelayMutationQuery = {
         fatQuery,
       })),
     ];
-    return RelayQuery.Node.buildMutation(
+    return RelayQuery.Mutation.build(
       'OptimisticQuery',
       fatQuery.getType(),
       mutation.calls[0].name,
@@ -295,6 +296,7 @@ var RelayMutationQuery = {
       mutationName,
       mutation,
       tracker,
+      input,
     }: {
       /* Previously each element of configs had the type mixed, which meant
        * that they couldn't be used in configs.forEach without being
@@ -303,6 +305,7 @@ var RelayMutationQuery = {
        */
       configs: Array<{[key: string]: $FlowFixMe}>;
       fatQuery: RelayQuery.Fragment;
+      input: Variables,
       mutationName: string;
       mutation: GraphQL.Mutation;
       tracker?: RelayQueryTracker;
@@ -311,7 +314,7 @@ var RelayMutationQuery = {
     tracker = tracker || RelayStoreData.getDefaultInstance().getQueryTracker();
 
     var children = [
-      RelayQuery.Node.buildField(
+      RelayQuery.Field.build(
         CLIENT_MUTATION_ID,
         null,
         null,
@@ -323,7 +326,7 @@ var RelayMutationQuery = {
       switch (config.type) {
         case RelayMutationType.REQUIRED_CHILDREN:
           children = children.concat(config.children.map(child =>
-             RelayQuery.Node.create(
+             RelayQuery.Fragment.create(
               child,
               RelayMetaRoute.get('$buildQuery'),
               {}
@@ -352,7 +355,7 @@ var RelayMutationQuery = {
             parentName: config.parentName,
             tracker,
           }));
-          children.push(RelayQuery.Node.buildField(config.deletedIDFieldName));
+          children.push(RelayQuery.Field.build(config.deletedIDFieldName));
           break;
 
         case RelayMutationType.FIELDS_CHANGE:
@@ -367,18 +370,18 @@ var RelayMutationQuery = {
 
     // create a dummy field to re-fragment the input `fields`
     var fragmentedFields = children.length ?
-      refragmentRelayQuery(RelayQuery.Node.buildField(
+      refragmentRelayQuery(RelayQuery.Field.build(
         'build_mutation_field',
         null,
         children
       )) :
       null;
 
-    return RelayQuery.Node.buildMutation(
+    return RelayQuery.Mutation.build(
       mutationName,
       fatQuery.getType(),
       mutation.calls[0].name,
-      null,
+      input,
       fragmentedFields ? fragmentedFields.getChildren() : null,
       mutation.metadata
     );
@@ -402,7 +405,7 @@ function buildMutationFragment(
   fatQuery: RelayQuery.Fragment,
   fields: Array<RelayQuery.Node>
 ): ?RelayQuery.Fragment {
-  var fragment = RelayQuery.Node.buildFragment(
+  var fragment = RelayQuery.Fragment.build(
     'MutationQuery',
     fatQuery.getType(),
     fields
@@ -423,20 +426,20 @@ function buildEdgeField(
   edgeFields: Array<RelayQuery.Node>
 ): RelayQuery.Field {
   var fields = [
-    RelayQuery.Node.buildField('cursor'),
+    RelayQuery.Field.build('cursor'),
   ];
   if (RelayConnectionInterface.EDGES_HAVE_SOURCE_FIELD &&
       !GraphQLStoreDataHandler.isClientID(parentID)) {
     fields.push(
-      RelayQuery.Node.buildField(
+      RelayQuery.Field.build(
         'source',
         null,
-        [RelayQuery.Node.buildField('id')]
+        [RelayQuery.Field.build('id')]
       )
     );
   }
   fields.push(...edgeFields);
-  var edgeField = flattenRelayQuery(RelayQuery.Node.buildField(
+  var edgeField = flattenRelayQuery(RelayQuery.Field.build(
     edgeName,
     null,
     fields

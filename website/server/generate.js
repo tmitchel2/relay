@@ -1,3 +1,12 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
 var buildGraphQLSpec = require('./buildGraphQLSpec');
 var request = require('request');
 var glob = require('glob');
@@ -34,7 +43,8 @@ var queue = (function() {
 })();
 
 exec('npm run build', {
-  cwd: path.resolve(__dirname, '../../website-prototyping-tools')
+  cwd: path.resolve(__dirname, '../../website-prototyping-tools'),
+  stdio: 'inherit',
 });
 
 buildGraphQLSpec('build');

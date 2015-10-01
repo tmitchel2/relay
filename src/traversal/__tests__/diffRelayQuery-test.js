@@ -20,7 +20,6 @@ var RelayConnectionInterface = require('RelayConnectionInterface');
 var RelayQuery = require('RelayQuery');
 var RelayQueryTracker = require('RelayQueryTracker');
 var diffRelayQuery = require('diffRelayQuery');
-var filterRelayQuery = require('filterRelayQuery');
 
 describe('diffRelayQuery', () => {
   var RelayRecordStore;
@@ -280,7 +279,6 @@ describe('diffRelayQuery', () => {
     // does not refetch `feedback.topLevelComments.count` but keeps other
     // range fields
     expect(diffQueries.length).toBe(1);
-    // the transform only adds `pageInfo` if `edges` is a direct descendant
     var edgesFragment = Relay.QL`
       fragment on TopLevelCommentsConnection {
         edges {
@@ -290,7 +288,7 @@ describe('diffRelayQuery', () => {
         },
       }
     `;
-    var expectedQuery = filterRelayQuery(getNode(Relay.QL`
+    var expectedQuery = getNode(Relay.QL`
       query {
         node(id:"story") {
           feedback {
@@ -300,12 +298,7 @@ describe('diffRelayQuery', () => {
           }
         }
       }
-    `), (node) => {
-      return !(
-        node instanceof RelayQuery.Field &&
-        node.getSchemaName() === RelayConnectionInterface.PAGE_INFO
-      );
-    });
+    `);
     expect(diffQueries[0].getName()).toBe(query.getName());
     expect(diffQueries[0]).toEqualQueryRoot(expectedQuery);
   });
@@ -672,11 +665,11 @@ describe('diffRelayQuery', () => {
     expect(diffQueries.length).toBe(2);
     expect(diffQueries[0].getName()).toBe(query.getName());
     expect(diffQueries[0]).toEqualQueryRoot(getNode(
-      Relay.QL`query{nodes(ids:"4") {id, name}}`
+      Relay.QL`query{nodes(ids:["4"]) {id, name}}`
     ));
     expect(diffQueries[1].getName()).toBe(query.getName());
     expect(diffQueries[1]).toEqualQueryRoot(getNode(
-      Relay.QL`query{nodes(ids:"4808495") {id, name}}`
+      Relay.QL`query{nodes(ids:["4808495"]) {id, name}}`
     ));
   });
 
@@ -1007,22 +1000,30 @@ describe('diffRelayQuery', () => {
     var diffQueries = diffRelayQuery(query, store, tracker);
     expect(diffQueries.length).toBe(2);
     expect(diffQueries[0].getName()).toBe(query.getName());
-    expect(diffQueries[0]).toEqualQueryRoot(getNode(Relay.QL`
+    expect(diffQueries[0]).toEqualQueryRoot(getVerbatimNode(Relay.QL`
       query {
         node(id:"4808495") {
           id,
-          name,
-          lastName,
+          __typename,
+          ... on Actor {
+            id,
+            lastName,
+            name,
+          },
         }
       }
     `));
     expect(diffQueries[1].getName()).toBe(query.getName());
-    expect(diffQueries[1]).toEqualQueryRoot(getNode(Relay.QL`
+    expect(diffQueries[1]).toEqualQueryRoot(getVerbatimNode(Relay.QL`
       query {
         node(id:"1023896548") {
           id,
-          firstName,
-          lastName,
+          __typename,
+          ... on Actor {
+            firstName,
+            id,
+            lastName,
+          },
         }
       }
     `));
@@ -1033,9 +1034,9 @@ describe('diffRelayQuery', () => {
           id,
           actors {
             id,
-            name,
             firstName,
-            lastName
+            lastName,
+            name,
           }
         }
       }
@@ -1141,7 +1142,7 @@ describe('diffRelayQuery', () => {
     `;
     var expected0 = getNode(Relay.QL`
       query {
-        nodes(ids:"4") {
+        nodes(ids:["4"]) {
           id,
           ${firstNameFrag},
           ${expectedFragment},
@@ -1150,7 +1151,7 @@ describe('diffRelayQuery', () => {
     `);
     var expected1 = getNode(Relay.QL`
       query {
-        nodes(ids:"4808495") {
+        nodes(ids:["4808495"]) {
           id,
           name,
           ${defer(firstNameFrag)},
@@ -1366,11 +1367,15 @@ describe('diffRelayQuery', () => {
       }
     `);
 
-    var expected2 = getNode(Relay.QL`
+    var expected2 = getVerbatimNode(Relay.QL`
       query {
         node(id:"4808495") {
           id,
-          name
+          __typename,
+          ... on User {
+            id,
+            name,
+          },
         }
       }
     `);
@@ -1480,11 +1485,15 @@ describe('diffRelayQuery', () => {
         }
       }
     `);
-    var expected2 = getNode(Relay.QL`
+    var expected2 = getVerbatimNode(Relay.QL`
       query {
         node(id:"660361306") {
           id,
-          name
+          __typename,
+          ... on User {
+            id,
+            name,
+          },
         }
       }
     `);
@@ -1589,9 +1598,18 @@ describe('diffRelayQuery', () => {
     var diffQueries = diffRelayQuery(query, store, tracker);
     expect(diffQueries.length).toBe(1);
     expect(diffQueries[0].getName()).toBe(query.getName());
-    expect(diffQueries[0]).toEqualQueryRoot(getNode(
-      Relay.QL`query{node(id:"4808495"){name}}`
-    ));
+    expect(diffQueries[0]).toEqualQueryRoot(getVerbatimNode(Relay.QL`
+      query {
+        node(id:"4808495"){
+          id,
+          __typename,
+          ... on User {
+            id,
+            name,
+          },
+        }
+      }
+    `));
 
     var trackedQuery = getNode(Relay.QL`
       query {
@@ -1648,10 +1666,15 @@ describe('diffRelayQuery', () => {
       diffCalls: null
     });
 
-    var expected = getNode(Relay.QL`
+    var expected = getVerbatimNode(Relay.QL`
       query {
         node(id:"4808495") {
-          lastName,
+          id,
+          __typename,
+          ... on User {
+            id,
+            lastName,
+          },
         }
       }
     `);
@@ -1755,11 +1778,13 @@ describe('diffRelayQuery', () => {
       query {
         nodes(ids:"4") {
           id,
+          __typename,
           friends(find:"4808495") {
             edges {
               cursor,
               node {
                 id,
+                __typename, # not strictly required here
               },
               source {
                 id,
@@ -1803,11 +1828,15 @@ describe('diffRelayQuery', () => {
       diffCalls: null
     });
 
-    var expected = getNode(Relay.QL`
+    var expected = getVerbatimNode(Relay.QL`
       query {
         node(id:"4808495") {
           id,
-          lastName
+          __typename,
+          ... on User {
+            id,
+            lastName,
+          },
         }
       }
     `);

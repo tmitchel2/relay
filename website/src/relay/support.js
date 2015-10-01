@@ -1,5 +1,11 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -15,7 +21,7 @@ var H2 = require('H2');
 var support = React.createClass({
   render: function() {
     return (
-      <Site section="support" title="Support">
+      <Site section="support" title="Relay Support">
 
         <section className="content wrap documentationContent nosidebar">
           <div className="inner-content">

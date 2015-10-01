@@ -128,7 +128,7 @@ describe('RelayContainer', function() {
           testPhotoSize: TEST_PHOTO_SIZE,
         },
         fragments: {
-          photo: variables => Relay.QL`
+          photo: () => Relay.QL`
             fragment on Actor {
               profilePicture(size:$testPhotoSize) {
                 uri
@@ -151,7 +151,10 @@ describe('RelayContainer', function() {
           ),
           new GraphQL.Field(
             'id', null, null, null, null, null, {generated: true}
-          )
+          ),
+          new GraphQL.Field(
+            '__typename', null, null, null, null, null, {generated: true}
+          ),
         ])
       ));
     });
@@ -186,10 +189,12 @@ describe('RelayContainer', function() {
       expect(fragment).toEqualQueryNode(getNode(
         new GraphQL.QueryFragment('Test', 'Actor', [
           new GraphQL.Field('id'),
+          new GraphQL.Field('__typename'),
           new GraphQL.Field('name')
         ], [
           new GraphQL.QueryFragment('Test', 'Actor', [
             new GraphQL.Field('id'),
+            new GraphQL.Field('__typename'),
             new GraphQL.Field('url')
           ])
         ])
@@ -210,7 +215,7 @@ describe('RelayContainer', function() {
     beforeEach(() => {
       MockFeed = Relay.createContainer(MockComponent, {
         fragments: {
-          viewer: variables => Relay.QL`
+          viewer: () => Relay.QL`
             fragment on Viewer {
               newsFeed,
             }
@@ -244,7 +249,7 @@ describe('RelayContainer', function() {
         }),
         {sideshow: true}
       );
-      var expected = RelayQuery.Node.buildFragment(
+      var expected = RelayQuery.Fragment.build(
         'Test',
         'Viewer',
         [getNode(feedFragment)]
@@ -289,7 +294,7 @@ describe('RelayContainer', function() {
         MockSideshow.getQuery('viewer', {hasSideshow: false}),
         {}
       );
-      var expected = RelayQuery.Node.buildFragment(
+      var expected = RelayQuery.Fragment.build(
         'Test',
         'Viewer',
         [getNode(feedFragment)],

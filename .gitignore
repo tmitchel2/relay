@@ -1,8 +1,8 @@
-dist/
+.nvmrc
 node_modules
 npm-debug.log
-website/build
-website/src/relay/docs
-website/src/relay/graphql
-website/src/relay/prototyping
-.nvmrc
+/dist/
+/website/build
+/website/src/relay/docs
+/website/src/relay/graphql
+/website/src/relay/prototyping

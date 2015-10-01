@@ -138,7 +138,7 @@ class LikeStoryMutation extends Relay.Mutation {
 
 ## Fragment variables
 
-Like can be done with [Relay containers](guides-containers.html), we can prepare variables for use by our mutation's fragment builders, based on the previous variables and the runtime environment.
+Like it can be done with [Relay containers](guides-containers.html), we can prepare variables for use by our mutation's fragment builders, based on the previous variables and the runtime environment.
 
 ```
 class RentMovieMutation extends Relay.Mutation {
@@ -364,7 +364,7 @@ class IntroduceShipMutation extends Relay.Mutation {
         // of any call, append the ship to the end of the connection
         '': 'append',
         // Prepend the ship, wherever the connection is sorted by age
-        'orderby:newest': 'prepend',
+        'orderby(newest)': 'prepend',
       },
     }];
   }
@@ -461,7 +461,7 @@ class LikeStoryMutation extends Relay.Mutation {
       story: {
         id: this.props.story.id,
         likers: {
-          count: this.props.story.likers.count + 1,
+          count: this.props.story.likers.count + (this.props.story.viewerDoesLike ? -1 : 1),
         },
         viewerDoesLike: !this.props.story.viewerDoesLike,
       },

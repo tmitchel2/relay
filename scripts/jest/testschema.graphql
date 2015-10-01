@@ -101,7 +101,7 @@ type Comment implements Node {
   likeSentence: Text
   message: Text
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   segments(first: String): Segments
   screennames: [Screenname]
   subscribeStatus: String
@@ -184,7 +184,7 @@ type Feedback implements Node {
   likeSentence: Text
   message: Text
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   segments(first: String): Segments
   screennames: [Screenname]
   subscribeStatus: String
@@ -278,7 +278,7 @@ interface Node {
   likeSentence: Text
   message: Text
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   segments(first: String): Segments
   screennames: [Screenname]
   subscribeStatus: String
@@ -302,7 +302,7 @@ interface Actor {
   id: ID!
   lastName: String
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   screennames: [Screenname]
   subscribeStatus: String
   subscribers(first: String): SubscribersConnection
@@ -340,7 +340,7 @@ type Page implements Node Actor {
   likeSentence: Text
   message: Text
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   segments(first: String): Segments
   screennames: [Screenname]
   subscribeStatus: String
@@ -398,19 +398,56 @@ type SegmentsEdge {
   node: String
 }
 
-type Story implements FeedUnit {
+type NonNodeStory implements FeedUnit {
   actor: Actor
-  actors: [Actor]
   actorCount: Int
-  canViewerDelete: Boolean
   feedback: Feedback
   id: ID!
   message: Text
-  name: String
-  profilePicture(size: [String]): Image
-  seenState: String
   tracking: String
+}
+
+type Story implements FeedUnit Node {
+  # FeedUnit
+  canViewerDelete: Boolean
+  seenState: String
+
+  # Node
+  actor: Actor
+  actors: [Actor]
+  actorCount: Int
+  address: StreetAddress
+  allPhones: [Phone]
+  author: User
+  backgroundImage: Image
+  birthdate: Date
+  body: Text
+  canViewerComment: Boolean
+  canViewerLike: Boolean
+  comments(first: String, last: Int, orderby: String): CommentsConnection
+  doesViewerLike: Boolean
+  emailAddresses: [String]
+  feedback: Feedback
+  firstName(if: Boolean, unless: Boolean): String
+  friends(after: String, first: String, orderby: [String], find: String, isViewerFriend: Boolean, if: Boolean, unless: Boolean): FriendsConnection
+  hometown: Page
+  id: ID!
+  lastName: String
+  likers(first: String): LikersOfContentConnection
+  likeSentence: Text
+  message: Text
+  name: String
+  profilePicture(size: [String], preset: PhotoSize): Image
+  segments(first: String): Segments
+  screennames: [Screenname]
+  subscribeStatus: String
+  subscribers(first: String): SubscribersConnection
+  topLevelComments(first: String): TopLevelCommentsConnection
+  tracking: String
+  url(site: String): String
   websites: [String]
+  username: String
+  viewerSavedState: String
 }
 
 type StreetAddress {
@@ -478,7 +515,7 @@ type User implements Node Actor {
   likeSentence: Text
   message: Text
   name: String
-  profilePicture(size: [String]): Image
+  profilePicture(size: [String], preset: PhotoSize): Image
   segments(first: String): Segments
   screennames: [Screenname]
   subscribeStatus: String
@@ -510,6 +547,11 @@ type ViewerNotificationsUpdateAllSeenStateResponsePayload {
 enum Environment {
   WEB
   MOBILE
+}
+
+enum PhotoSize {
+  SMALL
+  LARGE
 }
 
 type Settings {

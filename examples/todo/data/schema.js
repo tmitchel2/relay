@@ -1,3 +1,12 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
 import {
   GraphQLBoolean,
   GraphQLID,
@@ -78,16 +87,6 @@ var {
 } = connectionDefinitions({
   name: 'Todo',
   nodeType: GraphQLTodo,
-  connectionFields: () => ({
-    totalCount: {
-      type: GraphQLInt,
-      resolve: (conn) => conn.edges.length,
-    },
-    completedCount: {
-      type: GraphQLInt,
-      resolve: (conn) => conn.edges.filter(edge => edge.node.complete).length
-    },
-  })
 });
 
 var GraphQLUser = new GraphQLObjectType({
@@ -96,9 +95,24 @@ var GraphQLUser = new GraphQLObjectType({
     id: globalIdField('User'),
     todos: {
       type: TodosConnection,
-      args: connectionArgs,
-      resolve: (obj, args) => connectionFromArray(getTodos(), args),
-    }
+      args: {
+        status: {
+          type: GraphQLString,
+          defaultValue: 'any',
+        },
+        ...connectionArgs,
+      },
+      resolve: (obj, {status, ...args}) =>
+        connectionFromArray(getTodos(status), args),
+    },
+    totalCount: {
+      type: GraphQLInt,
+      resolve: () => getTodos().length
+    },
+    completedCount: {
+      type: GraphQLInt,
+      resolve: () => getTodos('completed').length
+    },
   },
   interfaces: [nodeInterface]
 });
@@ -258,7 +272,7 @@ var Mutation = new GraphQLObjectType({
   },
 });
 
-export var GraphQLTodoSchema = new GraphQLSchema({
+export var schema = new GraphQLSchema({
   query: Root,
   mutation: Mutation
 });

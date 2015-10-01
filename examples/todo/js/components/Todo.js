@@ -1,8 +1,19 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
 import ChangeTodoStatusMutation from '../mutations/ChangeTodoStatusMutation';
 import RemoveTodoMutation from '../mutations/RemoveTodoMutation';
 import RenameTodoMutation from '../mutations/RenameTodoMutation';
 import TodoTextInput from './TodoTextInput';
 
+import React from 'react';
+import Relay from 'react-relay';
 import classnames from 'classnames';
 
 class Todo extends React.Component {

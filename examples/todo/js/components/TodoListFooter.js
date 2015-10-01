@@ -1,35 +1,48 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+// IndexLink isn't exported in main package on React Router 1.0.0-rc1.
+import IndexLink from 'react-router/lib/IndexLink';
+import Link from 'react-router/lib/Link';
 import RemoveCompletedTodosMutation from '../mutations/RemoveCompletedTodosMutation';
+
+import React from 'react';
+import Relay from 'react-relay';
 
 class TodoListFooter extends React.Component {
   _handleRemoveCompletedTodosClick = () => {
     Relay.Store.update(
       new RemoveCompletedTodosMutation({
-        todos: this.props.todos,
+        todos: this.props.viewer.todos,
         viewer: this.props.viewer,
       })
     );
   }
   render() {
-    var numTodos = this.props.todos.totalCount;
-    var numCompletedTodos = this.props.todos.completedCount;
+    var numTodos = this.props.viewer.totalCount;
+    var numCompletedTodos = this.props.viewer.completedCount;
     return (
       <footer className="footer">
         <span className="todo-count">
           <strong>{numTodos}</strong> item{numTodos === 1 ? '' : 's'} left
         </span>
-        { /* TODO: Implement routing
         <ul className="filters">
           <li>
-            <a className="selected" href="#/">All</a>
+            <IndexLink to="/" activeClassName="selected">All</IndexLink>
           </li>
           <li>
-            <a href="#/active">Active</a>
+            <Link to="/active" activeClassName="selected">Active</Link>
           </li>
           <li>
-            <a href="#/completed">Completed</a>
+            <Link to="/completed" activeClassName="selected">Completed</Link>
           </li>
         </ul>
-        */ }
         {numCompletedTodos > 0 &&
           <button
             className="clear-completed"
@@ -43,21 +56,20 @@ class TodoListFooter extends React.Component {
 }
 
 export default Relay.createContainer(TodoListFooter, {
+  prepareVariables() {
+    return {
+      limit: Number.MAX_SAFE_INTEGER || 9007199254740991,
+    };
+  },
+
   fragments: {
-    todos: () => Relay.QL`
-      fragment on TodoConnection {
-        completedCount,
-        edges {
-          node {
-            complete,
-          },
-        },
-        totalCount,
-        ${RemoveCompletedTodosMutation.getFragment('todos')},
-      }
-    `,
     viewer: () => Relay.QL`
       fragment on User {
+        completedCount,
+        todos(status: "completed", first: $limit) {
+          ${RemoveCompletedTodosMutation.getFragment('todos')},
+        },
+        totalCount,
         ${RemoveCompletedTodosMutation.getFragment('viewer')},
       }
     `,

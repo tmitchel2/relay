@@ -1,3 +1,12 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
 export class Todo extends Object {}
 export class User extends Object {}
 
@@ -12,7 +21,7 @@ var usersById = {
 };
 
 // Mock todo data
-var todosById  = {};
+var todosById = {};
 var todoIdsByUser = {
   [VIEWER_ID]: []
 };
@@ -39,12 +48,16 @@ export function getTodo(id) {
   return todosById[id];
 }
 
-export function getTodos() {
-  return todoIdsByUser[VIEWER_ID].map((id) => todosById[id]);
+export function getTodos(status = 'any') {
+  var todos = todoIdsByUser[VIEWER_ID].map(id => todosById[id]);
+  if (status === 'any') {
+    return todos;
+  }
+  return todos.filter(todo => todo.complete === (status === 'completed'));
 }
 
 export function getUser(id) {
-  return usersById[VIEWER_ID];
+  return usersById[id];
 }
 
 export function getViewer() {
@@ -71,8 +84,8 @@ export function removeTodo(id) {
 }
 
 export function removeCompletedTodos() {
-  var todosToRemove = getTodos().filter((todo) => todo.complete);
-  todosToRemove.forEach((todo) => removeTodo(todo.id));
+  var todosToRemove = getTodos().filter(todo => todo.complete);
+  todosToRemove.forEach(todo => removeTodo(todo.id));
   return todosToRemove.map(todo => todo.id);
 }
 

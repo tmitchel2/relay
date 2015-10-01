@@ -28,7 +28,6 @@ var RelayMutationType = require('RelayMutationType');
 var RelayQueryWriter = require('RelayQueryWriter');
 var GraphQLMutatorConstants = require('GraphQLMutatorConstants');
 var generateClientEdgeID = require('generateClientEdgeID');
-var generateRQLFieldAlias = require('generateRQLFieldAlias');
 var writeRelayUpdatePayload = require('writeRelayUpdatePayload');
 
 describe('writePayload()', () => {
@@ -83,9 +82,9 @@ describe('writePayload()', () => {
         }
       `);
       var payload = {
-        feedback_id: {
+        node: {
           id: 'feedback_id',
-          [generateRQLFieldAlias('topLevelComments.first(1)')]: {
+          topLevelComments: {
             count: 1,
             edges: [
               {
@@ -303,11 +302,10 @@ describe('writePayload()', () => {
           }
         }
       `);
-      var alias = generateRQLFieldAlias('topLevelComments.first(1)');
       var payload = {
-        feedback123: {
+        node: {
           id: feedbackID,
-          [alias]: {
+          topLevelComments: {
             count: 1,
             edges: [
               {
@@ -510,6 +508,7 @@ describe('writePayload()', () => {
       expect(store.getField(connectionID, 'count')).toBe(0);
     });
   });
+
   describe('plural node delete mutation', () => {
     var store, queueStore, firstRequestID, secondRequestID, thirdRequestID;
 
@@ -543,15 +542,11 @@ describe('writePayload()', () => {
         }
       `);
       var payload = {
-        request1: {
-          id: firstRequestID,
-        },
-        request2: {
-          id: secondRequestID,
-        },
-        request3: {
-          id: secondRequestID,
-        },
+        nodes: [
+          {id: firstRequestID},
+          {id: secondRequestID},
+          {id: thirdRequestID},
+        ],
       };
 
       writePayload(store, query, payload);
@@ -718,11 +713,10 @@ describe('writePayload()', () => {
           }
         }
       `);
-      var alias = generateRQLFieldAlias('topLevelComments.first(1)');
       var payload = {
-        feedback123: {
+        node: {
           id: feedbackID,
-          [alias]: {
+          topLevelComments: {
             count: 1,
             edges: [
               {
@@ -1045,6 +1039,7 @@ describe('writePayload()', () => {
       expect(store.getField(nextEdgeID, 'cursor')).toBe(nextCursor);
       expect(store.getLinkedRecordID(nextEdgeID, 'node')).toBe(nextNodeID);
       expect(store.getField(nextNodeID, 'id')).toBe(nextNodeID);
+      expect(store.getType(nextNodeID)).toBe('Comment');
       expect(store.getLinkedRecordID(nextNodeID, 'body')).toBe(bodyID);
       expect(store.getField(bodyID, 'text')).toBe(input.message.text);
       expect(store.getRangeMetadata(

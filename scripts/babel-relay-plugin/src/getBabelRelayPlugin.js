@@ -9,7 +9,7 @@
 
 'use strict';
 
-var GraphQLDocumentTransformer = require('./GraphQLDocumentTransformer');
+var RelayQLTransformer = require('./RelayQLTransformer');
 var buildClientSchema =
   require('graphql/utilities/buildClientSchema').buildClientSchema;
 
@@ -48,21 +48,18 @@ function extractTemplate(node) {
  * GraphQL queries.
  */
 function getBabelRelayPlugin(
-  schemaProvider /*: Object | Function */
+  schemaProvider, /*: Object | Function */
+  options /*: ?Object */
 ) /*: Object */ {
   return function(babel) {
     var Plugin = babel.Plugin;
-    var parse = babel.parse;
     var t = babel.types;
-    var traverse = babel.traverse;
 
-    /**
-     * Same as `babel.util.parseTemplate`.
-     */
-    function parseTemplate(loc, code) {
-      var ast = parse(code, {filename: loc, looseModules: true}).program;
-      return traverse.removeProperties(ast);
-    }
+    options = options || {};
+
+    var warning = options.suppressWarnings ?
+      function() {} :
+      console.warn.bind(console);
 
     return new Plugin('relay-query', {
       visitor: {
@@ -111,11 +108,11 @@ function getBabelRelayPlugin(
           var documentTransformer = state.opts.extra.documentTransformer;
           if (!documentTransformer) {
             var schema = getSchema(schemaProvider);
-            documentTransformer = new GraphQLDocumentTransformer(schema);
+            documentTransformer = new RelayQLTransformer(schema);
             state.opts.extra.documentTransformer = documentTransformer;
           }
           assert(
-            documentTransformer instanceof GraphQLDocumentTransformer,
+            documentTransformer instanceof RelayQLTransformer,
             'getBabelRelayPlugin(): Expected a document transformer to be ' +
             'configured for this instance of the plugin.'
           );
@@ -141,11 +138,11 @@ function getBabelRelayPlugin(
               validationErrors.forEach(function(validationError) {
                 errorMessages = errorMessages || [];
                 errorMessages.push(validationError.message);
-                console.warn(
+                warning(
                   '\n-- GraphQL Validation Error -- %s --\n',
                   path.basename(filename)
                 );
-                console.warn(
+                warning(
                   'Error: ' + validationError.message + '\n' +
                   'File:  ' + filename + '\n' +
                   'Source:'
@@ -155,19 +152,19 @@ function getBabelRelayPlugin(
                   var prefix = '> ';
                   var highlight = repeat(' ', location.column - 1) + '^^^';
                   if (preview) {
-                    console.warn(prefix);
-                    console.warn(prefix + preview);
-                    console.warn(prefix + highlight);
+                    warning(prefix);
+                    warning(prefix + preview);
+                    warning(prefix + highlight);
                   }
                 });
               });
             } else {
               errorMessages = [error.message];
-              console.warn(
+              warning(
                 '\n-- Relay Transform Error -- %s --\n',
                 path.basename(filename)
               );
-              console.warn(
+              warning(
                 'Error: ' + error.message + '\n' +
                 'File:  ' + filename + '\n'
               );
@@ -180,31 +177,33 @@ function getBabelRelayPlugin(
               filename +
               '`.'
             );
-            code = (
-              'function() { throw new Error(\'' +
-                message.replace(/\'/g, '\\\'') +
-              '\'); }'
+            code = t.functionExpression(
+              null,
+              [],
+              t.blockStatement([
+                t.throwStatement(
+                  t.newExpression(
+                    t.identifier('Error'),
+                    [t.literal(message)]
+                  )
+                )
+              ])
             );
 
-            // also log the full error if `debug` option is set
-            if (state.opts.extra.debug) {
+            if (options.debug) {
               console.log(error.message);
               console.log(error.stack);
             }
+            if (options.abortOnError) {
+              throw new Error(
+                'Aborting due to GraphQL validation/transform error(s).'
+              );
+            }
           }
-          code = '(' + code + ')';
-          var funcExpr = parseTemplate('Relay.QL', code).body[0].expression;
 
           // Immediately invoke the function with substitutions as arguments.
           var substitutions = node.quasi.expressions;
-          var funcCall = t.callExpression(
-            t.functionExpression(
-              null,
-              funcExpr.params,
-              funcExpr.body
-            ),
-            substitutions
-          );
+          var funcCall = t.callExpression(code, substitutions);
           this.replaceWith(funcCall);
         }
       }

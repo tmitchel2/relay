@@ -70,7 +70,7 @@ describe('buildRQL', () => {
     });
 
     it('creates fragments with variables', () => {
-      var builder = variables => Relay.QL`
+      var builder = () => Relay.QL`
         fragment on Node {
           id,
           profilePicture(size:$sizeVariable) {
@@ -88,7 +88,7 @@ describe('buildRQL', () => {
       });
       expect(fragment instanceof RelayQuery.Fragment).toBe(true);
       var children = fragment.getChildren();
-      expect(children.length).toBe(2);
+      expect(children.length).toBe(3);
       expect(children[1].getSchemaName()).toBe('profilePicture');
       // Variable has the applied value, not initial value.
       expect(children[1].getCallsWithValues()).toEqual([
@@ -97,7 +97,7 @@ describe('buildRQL', () => {
     });
 
     it('returns === fragments', () => {
-      var builder = variables => Relay.QL`
+      var builder = () => Relay.QL`
         fragment on Node {
           id,
           profilePicture(size:$sizeVariable) {
@@ -113,7 +113,7 @@ describe('buildRQL', () => {
 
   describe('Query()', () => {
     it('returns undefined if the node is not a query', () => {
-      var builder = (Component, variables) => Relay.QL`
+      var builder = () => Relay.QL`
         fragment on Node {
           id,
         }
@@ -124,7 +124,7 @@ describe('buildRQL', () => {
     });
 
     it('creates queries with components and variables', () => {
-      var builder = (Component, variables) => Relay.QL`
+      var builder = Component => Relay.QL`
         query {
           node(id:$id) {
             id,
@@ -144,13 +144,13 @@ describe('buildRQL', () => {
         name: 'node',
         value: '123',
       });
-      expect(query.getChildren()[1].equals(
+      expect(query.getChildren()[2].equals(
         getNode(MockContainer.getFragment('foo'), variables)
       )).toBe(true);
     });
 
     it('returns === queries for the same component', () => {
-      var builder = (Component, variables) => Relay.QL`
+      var builder = Component => Relay.QL`
         query {
           node(id:$id) {
             ${Component.getFragment('foo')}
@@ -169,7 +169,7 @@ describe('buildRQL', () => {
         },
       });
 
-      var builder = (Component, variables) => Relay.QL`
+      var builder = Component => Relay.QL`
         query {
           node(id:$id) {
             ${Component.getFragment('foo')}
@@ -204,7 +204,7 @@ describe('buildRQL', () => {
         name: 'node',
         value: '123',
       });
-      expect(query.getChildren()[1].equals(
+      expect(query.getChildren()[2].equals(
         getNode(MockContainer.getFragment('foo'), variables)
       )).toBe(true);
     });

@@ -15,7 +15,7 @@
 var Map = require('Map');
 import type {
   RelayLazyContainer,
-  RelayQueryConfig
+  RelayQueryConfigSpec
 } from 'RelayContainer';
 import type {RelayQuerySet} from 'RelayInternalTypes';
 var RelayMetaRoute = require('RelayMetaRoute');
@@ -36,7 +36,7 @@ var queryCache = new Map();
  */
 function getRelayQueries(
   Component: RelayLazyContainer,
-  route: RelayQueryConfig
+  route: RelayQueryConfigSpec
 ): RelayQuerySet {
   if (!queryCache.has(Component)) {
     queryCache.set(Component, {});
@@ -79,7 +79,7 @@ function getRelayQueries(
         queryName
       );
       if (concreteQuery) {
-        var rootQuery = RelayQuery.Node.createQuery(
+        var rootQuery = RelayQuery.Root.create(
           concreteQuery,
           RelayMetaRoute.get(route.name),
           route.params

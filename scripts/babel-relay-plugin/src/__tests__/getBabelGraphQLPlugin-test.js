@@ -10,15 +10,16 @@
 'use strict';
 
 var path = require('path');
-var readFixtures = require('../readFixtures');
-var transformGraphQL = require('../transformGraphQL');
+var readFixtures = require('../tools/readFixtures');
+var transformGraphQL = require('../tools/transformGraphQL');
 
-var SCHEMA_PATH = path.resolve(__dirname, './testschema.rfc.json');
+var FIXTURE_PATH = path.resolve(__dirname, '..', '__fixtures__');
+var SCHEMA_PATH = path.resolve(__dirname, 'testschema.rfc.json');
 
 var transform = transformGraphQL.bind(null, SCHEMA_PATH);
 
 describe('getBabelRelayPlugin', function() {
-  var fixtures = readFixtures();
+  var fixtures = readFixtures(FIXTURE_PATH);
 
   Object.keys(fixtures).forEach(function(testName) {
     var fixture = fixtures[testName];

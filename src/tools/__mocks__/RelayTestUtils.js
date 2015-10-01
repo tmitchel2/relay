@@ -34,7 +34,7 @@ var RelayTestUtils = {
     var RelayPropTypes = require('RelayPropTypes');
     var RelayRoute = require('RelayRoute');
 
-    class ContextSetter {
+    class ContextSetter extends React.Component {
       getChildContext() {
         return this.props.context;
       }
@@ -187,7 +187,7 @@ var RelayTestUtils = {
     // e.g. `{ref_q0: '<ref_q0>'}`
     var variables = {[name]: '<' + callValue.callVariableName + '>'};
 
-    return RelayQuery.Node.create(
+    return RelayQuery.Root.create(
       new GraphQL.Query(
         'nodes',
         new GraphQL.BatchCallVariable(id, refParam.path),
@@ -315,6 +315,23 @@ var RelayTestUtils = {
       return true;
     },
 
+    toEqualPrintedQuery(expected) {
+      var minifiedActual = RelayTestUtils.minifyQueryText(this.actual);
+      var minifiedExpected = RelayTestUtils.minifyQueryText(expected);
+
+      if (minifiedActual !== minifiedExpected) {
+        this.message = () => {
+          return [
+            minifiedActual,
+            'to equal',
+            minifiedExpected,
+          ].join('\n');
+        };
+        return false;
+      }
+      return true;
+    },
+
     /**
      * Checks if a RelayQuery.Node is `equals()` to another.
      */
@@ -369,7 +386,7 @@ var RelayTestUtils = {
         };
         return false;
       }
-      var fragment = RelayQuery.Node.create(
+      var fragment = RelayQuery.Fragment.create(
         new GraphQL.QueryFragment('Test', 'Node', [
           new GraphQL.Field('__test__')
         ]),
@@ -391,66 +408,17 @@ var RelayTestUtils = {
       }
       return true;
     },
+  },
 
-    /**
-     * Compares a JSON object of RelayQuery with a JSON object. Succeeds when
-     * when the objects match.
-     */
-    toMatchQueryJSON(expected) {
-      var matchQueryJSON = (actual, expected, path) =>  {
-        if (typeof actual !== 'object') {
-          if (actual === expected) {
-            return true;
-          } else {
-            this.message = () => {
-              return 'Expected ' + path.join('.') + ' to be ' + expected +
-                ', but got ' + actual;
-            };
-            return false;
-          }
-        }
-        for (var key in actual) {
-          // Skip extra fields in actual that is under metadata.
-          if (expected.hasOwnProperty(key) !== actual.hasOwnProperty(key) &&
-              (path.length == 0 || path[path.length-1] !== 'metadata')) {
-            this.message = () => {
-              return 'Expected ' + path.join('.') + ' to not have key: ' +
-                key;
-            };
-            return false;
-          }
-        }
-        for (var k in expected) {
-          if (expected.hasOwnProperty(k) !== actual.hasOwnProperty(k)) {
-            if (path.length > 0 && path[path.length-1] === 'metadata') {
-              continue;
-            }
-            this.message = () => {
-              return 'Expected ' + path.join('.') + ' to have key: ' + k;
-            };
-            return false;
-          }
-          var value = expected[k];
-          var result;
-          if (Array.isArray(value)) {
-            for (var jj = 0; jj < value.length; jj++) {
-              path.push(k + '[' + jj + ']');
-              result = matchQueryJSON(actual[k][jj], value[jj], path);
-            }
-          } else {
-            path.push(k);
-            result = matchQueryJSON(actual[k], expected[k], path);
-          }
-          if (result) {
-            path.pop();
-          } else {
-            return result;
-          }
-        }
-        return true;
-      };
-      return matchQueryJSON(this.actual, expected, []);
-    }
+  /**
+   * Returns a version of the query text with extraneous whitespace removed.
+   */
+  minifyQueryText(queryText) {
+    return queryText
+      .replace(/\n/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*([\{\}\(\):,])\s*/g, '$1')
+      .trim();
   },
 
   unmockRelayForFB() {
@@ -474,9 +442,27 @@ var RelayTestUtils = {
 
   /**
    * Helper to write the result payload of a (root) query into a store,
-   * returning created/updated ID sets.
+   * returning created/updated ID sets. The payload is transformed before
+   * writing; property keys are rewritten from application names into
+   * serialization keys matching the fields in the query.
    */
   writePayload(store, query, payload, tracker, options) {
+    var transformRelayQueryPayload = require('transformRelayQueryPayload');
+
+    return RelayTestUtils.writeVerbatimPayload(
+      store,
+      query,
+      transformRelayQueryPayload(query, payload),
+      tracker,
+      options
+    );
+  },
+
+  /**
+   * Helper to write the result payload into a store. Unlike `writePayload`,
+   * the payload is not transformed first.
+   */
+  writeVerbatimPayload(store, query, payload, tracker, options) {
     var RelayChangeTracker = require('RelayChangeTracker');
     var RelayQueryTracker = require('RelayQueryTracker');
     var RelayQueryWriter = require('RelayQueryWriter');
