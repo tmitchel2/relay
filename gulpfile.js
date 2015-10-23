@@ -66,6 +66,7 @@ var babelOpts = {
   _moduleMap: objectAssign({}, require('fbjs/module-map'), {
     'React': 'react',
     'ReactDOM': 'react-dom',
+    'ReactNative': 'react-native',
     'StaticContainer.react': 'react-static-container'
   })
 };
