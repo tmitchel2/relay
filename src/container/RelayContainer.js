@@ -19,7 +19,6 @@ const GraphQLFragmentPointer = require('GraphQLFragmentPointer');
 const GraphQLStoreDataHandler = require('GraphQLStoreDataHandler');
 const GraphQLStoreQueryResolver = require('GraphQLStoreQueryResolver');
 const React = require('React');
-const ReactDOM = require('ReactDOM');
 const RelayContainerComparators = require('RelayContainerComparators');
 const RelayContainerProxy = require('RelayContainerProxy');
 const RelayFragmentReference = require('RelayFragmentReference');
@@ -31,6 +30,8 @@ const RelayProfiler = require('RelayProfiler');
 const RelayQuery = require('RelayQuery');
 const RelayStore = require('RelayStore');
 const RelayStoreData = require('RelayStoreData');
+const unstable_batchedUpdates = require('RelayUnstableBatchedUpdates');
+
 import type {
   Abortable,
   ComponentReadyStateChangeCallback,
@@ -81,7 +82,7 @@ var nextContainerID = 0;
 var storeData = RelayStoreData.getDefaultInstance();
 
 storeData.getChangeEmitter().injectBatchingStrategy(
-  ReactDOM.unstable_batchedUpdates
+  unstable_batchedUpdates
 );
 
 /**
@@ -288,7 +289,7 @@ function createContainerComponent(
         var mounted = this.mounted;
         if (mounted) {
           var updateProfiler = RelayProfiler.profile('RelayContainer.update');
-          ReactDOM.unstable_batchedUpdates(() => {
+          unstable_batchedUpdates(() => {
             this.setState(partialState, () => {
               updateProfiler.stop();
               if (isComplete) {
