@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "babel-runtime": "5.8.24",
-    "fbjs": "0.5.0-ccinternal",
+    "fbjs": "https://github.com/tmitchel2/fbjs/tarball/react-native-at-master",
     "react-static-container": "^1.0.0-alpha.1"
   },
   "peerDependencies": {
